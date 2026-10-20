@@ -1,0 +1,13 @@
+{
+  "name": "@zvm/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The part of a ZVM web app that must not differ between apps: the chain definition, address encoding, number formatting and the shared marks.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "peerDependencies": {
+    "viem": "^2.56.5",
+    "vue": "^3.5.13"
+  }
+}

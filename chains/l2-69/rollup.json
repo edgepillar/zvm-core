@@ -1,0 +1,27 @@
+{
+    "l1ChainId": 69,
+    "l2ChainId": 7340469,
+    "inbox": "z1zvmzvm69xxxxxxxxxxxxxxxxxxxxxxxxufk4x6",
+    "vault": "z1qzxc0kq0fatfunnnr28rls746h753zsf7gp88f",
+    "l1StartHeight": 106141,
+    "l2GenesisHash": "0x2a55e0b69e552a105d559e99b12e0cae28d6e07a3c7a9f264a1543a040ef8ea4",
+    "l2GenesisTimestamp": 1789785350,
+    "gasLimit": 300000000,
+    "gasPerPlasma": 16,
+    "maxNativeGas": 16777216,
+    "maxNativeGasPerBlock": 150000000,
+    "maxTxGas": 16777216,
+    "maxDepositCallGas": 1000000,
+    "chunkTtl": 8640,
+    "maxAssembledBytes": 524288,
+    "maxBatchBytes": 4194304,
+    "finalityDepth": 6,
+    "feeSplitter": "0x0000000000000000000000000000000000000000",
+    "evm": "karst",
+    "minBaseFee": 1000000,
+    "bridgeFee": {
+        "bps": 25,
+        "minZnn": 1000000,
+        "minQsr": 10000000
+    }
+}

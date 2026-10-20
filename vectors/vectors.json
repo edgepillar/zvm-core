@@ -1,0 +1,455 @@
+{
+  "version": 3,
+  "params": {
+    "chunkTtl": 8640,
+    "finalityDepth": 6,
+    "gasLimit": 300000000,
+    "gasPerPlasma": 16,
+    "l1ChainId": 70,
+    "l2ChainId": 7340470,
+    "maxNativeGas": 16777216
+  },
+  "addresses": {
+    "bridge": {
+      "evm": "0x4200000000000000000000000000000000000100",
+      "nom": "z1ggqqqqqqqqqqqqqqqqqqqqqqqqqqqqgqx4cu68"
+    },
+    "devKey1": {
+      "evm": "0x0035941e758a1f155fb30c1217a8186ed9e12651",
+      "nom": "z1qq6eg8n43g032hanpsfp02qcdmv7zfj3y2lt5d"
+    },
+    "inbox": {
+      "evm": "0x13366318c6318c6318c6318c6318c6318c6318c6",
+      "nom": "z1zvmxxxxxxxxxxxxxxxxxxxxxxxxxxxxxafdtd6"
+    },
+    "l1Block": {
+      "evm": "0x4200000000000000000000000000000000000015",
+      "nom": "z1ggqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4zk9ch9"
+    },
+    "l1InfoDepositor": {
+      "evm": "0xDeaDDEaDDeAdDeAdDEAdDEaddeAddEAdDEAd0001",
+      "nom": "z1m6kaatw74h02mh4dm6kaatw74h026qqpc4zrjg"
+    },
+    "systemDepositor": {
+      "evm": "0xDeAddEAddeADdeADdEaDdEaddeadDeADdEAD0002",
+      "nom": "z1m6kaatw74h02mh4dm6kaatw74h026qqzkxh4uh"
+    },
+    "vault": {
+      "evm": "0x0016c136a654fca2ddd8f7bd8e4183f7342af042",
+      "nom": "z1qqtvzd4x2n729hwc777cusvr7u6z4uzzq8aq6z"
+    },
+    "wrappedQsr": {
+      "evm": "0x4200000000000000000000000000000000000101",
+      "nom": "z1ggqqqqqqqqqqqqqqqqqqqqqqqqqqqqgpmrvf84"
+    }
+  },
+  "messages": [
+    {
+      "name": "call",
+      "encoded": "0x01f8679442000000000000000000000000000000000001008814d1120d7b16000082ea60b844a9059cbb0000000000000000000000001111111111111111111111111111111111111111000000000000000000000000000000000000000000000000000000000000002a",
+      "note": "0x01 ‖ rlp([to, value, gas, data]) — an ERC-20 transfer with 1.5 ZNN attached"
+    },
+    {
+      "name": "call.create",
+      "encoded": "0x01c88080808460806040",
+      "note": "empty 'to' deploys the data"
+    },
+    {
+      "name": "call.zero",
+      "encoded": "0x01c480808080",
+      "note": "every field at its zero value"
+    },
+    {
+      "name": "chunk",
+      "encoded": "0x03abababababababababababababababababababababababababababababababababababababababab"
+    },
+    {
+      "name": "assemble",
+      "encoded": "0x04f842a076e08d22ab4885a538b5e44ad6d4e319f012844b27cf41faa0046e15779c47b5a08d9ecdab7641d89164f1d5c8c66cc11acd6bc2a13ac09005fb1dd19cf69100f7"
+    },
+    {
+      "name": "batch.raw",
+      "encoded": "0x0200c88402f86e018201f8",
+      "note": "0x02 ‖ 0x00 ‖ rlp([tx, …]); compressed batches use flags 0x01 zlib, 0x02 brotli and 0x03 span, and are not pinned as bytes, since only the decoder is consensus"
+    },
+    {
+      "name": "call.boost",
+      "encoded": "0x01f86b9442000000000000000000000000000000000001008814d1120d7b16000082ea60b844a9059cbb0000000000000000000000001111111111111111111111111111111111111111000000000000000000000000000000000000000000000000000000000000002a8303d090",
+      "note": "0x01 ‖ rlp([to, value, gas, data, boost]) — the same call with a fifth item, valid only from the gas fork"
+    }
+  ],
+  "sourceHashes": [
+    {
+      "domain": 0,
+      "l1Hash": "19bdd3e5eab1701ee1a3710e878366182b545de79702c0f5c61985cdabc5636d",
+      "index": 0,
+      "hash": "0x1dffee35343605994e57e6e34f344fb69ef2733e23d8dc9d7bc2234adddc48d6"
+    },
+    {
+      "domain": 1,
+      "l1Hash": "19bdd3e5eab1701ee1a3710e878366182b545de79702c0f5c61985cdabc5636d",
+      "index": 0,
+      "hash": "0x1f5a12f0f172da81a8f8112986cda1ea24538fa7308716ce6bda7c6504dab233"
+    },
+    {
+      "domain": 3,
+      "l1Hash": "19bdd3e5eab1701ee1a3710e878366182b545de79702c0f5c61985cdabc5636d",
+      "index": 0,
+      "hash": "0xd0295fe0b0e84c954c184817b08d2396b18fda7470a50a966c390bdd4e1e088f"
+    },
+    {
+      "domain": 0,
+      "l1Hash": "19bdd3e5eab1701ee1a3710e878366182b545de79702c0f5c61985cdabc5636d",
+      "index": 7,
+      "hash": "0x0da7f40beefe3567c08a6ebee70e883e3937b7d00589188ca098654040adf75d"
+    }
+  ],
+  "l1Info": {
+    "calldata": "0x098999be00000000000000000000000000000000000000006aa8b000000000000001e24000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000aaaa0dc625572a6d6b81944a3c65f24863681e8bf2612863c299b5b454f17b4700000000000000000000000013366318c6318c6318c6318c6318c6318c6318c6000000000000000000000000",
+    "calldataKarst": "0x3db6be2b00000000000000000000000000000000000000006aa8b000000000000001e24000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000aaaa0dc625572a6d6b81944a3c65f24863681e8bf2612863c299b5b454f17b4700000000000000000000000013366318c6318c6318c6318c6318c6318c6318c60000000000000000000000000000",
+    "momentumHash": "aaaa0dc625572a6d6b81944a3c65f24863681e8bf2612863c299b5b454f17b47",
+    "momentumHeight": "123456",
+    "momentumTimestamp": "1789440000",
+    "txHash": "0xe4acf3008ade26a4380dc514549e511b7e9a07fab5faacdbc6258d7a7b09998e",
+    "txHashKarst": "0xc0781d3ea911b7a258efdb288866636f2112ff27e92f8665657ad6621ab65bd1"
+  },
+  "derived": [
+    {
+      "name": "native call",
+      "nomBlock": "b6a4953a9234357a593a371fe2671b252d532c3203e0624355d83b917bb4c99c",
+      "txHash": "0x9ffa1891e397b7ee2c2ab4b1812ea05d5c55d10520d080d607df3d1f2b983ad4",
+      "gas": 60000,
+      "encoded": "0x7ef89fa0bfd4f4202fcb5103a845be49b2f5dd27fbe98e35b5cf19581b5ebf7b5fafd1e7940035941e758a1f155fb30c1217a8186ed9e12651944200000000000000000000000000000000000100808814d1120d7b16000082ea6080b844a9059cbb0000000000000000000000001111111111111111111111111111111111111111000000000000000000000000000000000000000000000000000000000000002a"
+    },
+    {
+      "name": "znn deposit",
+      "nomBlock": "c43ef89e184332883a62ad45fd2097b6d375533d10a16f4cb0b1174b1f53389e",
+      "txHash": "0x812a771bbdbe7ee2b0c881e54659054b74ffbfd840e5b96f8010cdd8640a537d",
+      "gas": 21000,
+      "mint": "123456789000000000000",
+      "encoded": "0x7ef85ba0c4e1ca304dd88937dac7a3dd70ea9cc358b7ce3870fd52c288ef45a870614532940035941e758a1f155fb30c1217a8186ed9e12651940035941e758a1f155fb30c1217a8186ed9e126518906b14e9f7e4f5a5000808252088080"
+    }
+  ],
+  "gas": [
+    {
+      "usedPlasma": 21000,
+      "requested": 0,
+      "gas": 336000
+    },
+    {
+      "usedPlasma": 23312,
+      "requested": 0,
+      "gas": 372992
+    },
+    {
+      "usedPlasma": 23312,
+      "requested": 50000,
+      "gas": 50000
+    },
+    {
+      "usedPlasma": 1135112,
+      "requested": 0,
+      "gas": 16777216
+    },
+    {
+      "usedPlasma": 1135112,
+      "requested": 30000000,
+      "gas": 16777216
+    },
+    {
+      "usedPlasma": 21000,
+      "requested": 1000,
+      "gas": 1000
+    }
+  ],
+  "fee": {
+    "fromHeight": 1000,
+    "gasPerSupply": 115000000000000,
+    "genesisTimestamp": 1637755200,
+    "refEpoch": 1750,
+    "refZnn": "1366728966519283",
+    "refQsr": "3118999966129297",
+    "supplyAtRefPlusYear": [
+      "1524408966519283",
+      "3301499966129297"
+    ],
+    "cases": [
+      {
+        "note": "before the activation height: plasma alone, no burn needed",
+        "momentum": 999,
+        "timestamp": 1788991540,
+        "epoch": 1750,
+        "token": "zts1qqqqqqqqqqqqqqqqtq587y",
+        "burned": "0",
+        "dataLen": 100,
+        "basePlasma": 27800,
+        "paidPlasma": 27800,
+        "price": 1000,
+        "requested": 200000,
+        "feeGas": 0,
+        "gas": 200000,
+        "costOfGas": "0"
+      },
+      {
+        "note": "1 ZNN buys gas at the anchor epoch",
+        "momentum": 1000,
+        "timestamp": 1788991540,
+        "epoch": 1750,
+        "token": "zts1znnxxxxxxxxxxxxx9z4ulx",
+        "burned": "100000000",
+        "dataLen": 100,
+        "basePlasma": 27800,
+        "paidPlasma": 27800,
+        "price": 1000,
+        "requested": 16777216,
+        "feeGas": 8414250,
+        "gas": 444800,
+        "costOfGas": "11884600"
+      },
+      {
+        "note": "the same burn in QSR buys less, because QSR's supply is larger",
+        "momentum": 1000,
+        "timestamp": 1788991540,
+        "epoch": 1750,
+        "token": "zts1qsrxxxxxxxxxxxxxmrhjll",
+        "burned": "100000000",
+        "dataLen": 100,
+        "basePlasma": 27800,
+        "paidPlasma": 27800,
+        "price": 1000,
+        "requested": 16777216,
+        "feeGas": 3687079,
+        "gas": 444800,
+        "costOfGas": "27121739"
+      },
+      {
+        "note": "a small burn is the binding limit",
+        "momentum": 1000,
+        "timestamp": 1788991540,
+        "epoch": 1750,
+        "token": "zts1znnxxxxxxxxxxxxx9z4ulx",
+        "burned": "10000",
+        "dataLen": 100,
+        "basePlasma": 27800,
+        "paidPlasma": 27800,
+        "price": 1000,
+        "requested": 16777216,
+        "feeGas": 841,
+        "gas": 841,
+        "costOfGas": "11884600"
+      },
+      {
+        "note": "congestion: a block that paid 2.5x its base plasma buys 2.5x less gas",
+        "momentum": 1000,
+        "timestamp": 1788991540,
+        "epoch": 1750,
+        "token": "zts1znnxxxxxxxxxxxxx9z4ulx",
+        "burned": "100000000",
+        "dataLen": 100,
+        "basePlasma": 27800,
+        "paidPlasma": 69500,
+        "price": 2500,
+        "requested": 16777216,
+        "feeGas": 3365700,
+        "gas": 444800,
+        "costOfGas": "29711500"
+      },
+      {
+        "note": "one year on, the same burn buys slightly less: supply has grown",
+        "momentum": 1000,
+        "timestamp": 1820527540,
+        "epoch": 2115,
+        "token": "zts1znnxxxxxxxxxxxxx9z4ulx",
+        "burned": "100000000",
+        "dataLen": 100,
+        "basePlasma": 27800,
+        "paidPlasma": 27800,
+        "price": 1000,
+        "requested": 16777216,
+        "feeGas": 7543907,
+        "gas": 444800,
+        "costOfGas": "13255731"
+      },
+      {
+        "note": "nothing burned: no gas, whatever the plasma",
+        "momentum": 1000,
+        "timestamp": 1788991540,
+        "epoch": 1750,
+        "token": "zts1qqqqqqqqqqqqqqqqtq587y",
+        "burned": "0",
+        "dataLen": 100,
+        "basePlasma": 27800,
+        "paidPlasma": 27800,
+        "price": 1000,
+        "requested": 200000,
+        "feeGas": 0,
+        "gas": 0,
+        "costOfGas": "0"
+      }
+    ]
+  },
+  "forks": {
+    "note": "what each activation height changes. Every case below is computed against the fee section's schedule, with the gas and wire forks at momentum 2,000.",
+    "gasFrom": 2000,
+    "wireFrom": 2000,
+    "share": {
+      "gasLimit": 300000000,
+      "nativeFloor": 75000000,
+      "nativeCeiling": 225000000,
+      "relayedCeiling": 225000000,
+      "nativeBeforeTheFork": 150000000
+    },
+    "boost": [
+      {
+        "note": "no fifth item: the whole burn buys gas",
+        "encoded": "0x01dc94000000000000000000000000000000000000000080840100000080",
+        "burned": "100000000",
+        "boost": "0",
+        "feeGas": 8414250,
+        "boostGas": 0,
+        "gas": 368640
+      },
+      {
+        "note": "a quarter of the burn bought priority instead of gas",
+        "encoded": "0x01e19400000000000000000000000000000000000000008084010000008084017d7840",
+        "burned": "100000000",
+        "boost": "25000000",
+        "feeGas": 6310687,
+        "boostGas": 2103562,
+        "gas": 374080
+      },
+      {
+        "note": "the boost is what the lane is ordered by, in gas-equivalents",
+        "encoded": "0x01e1940000000000000000000000000000000000000000808401000000808402faf080",
+        "burned": "100000000",
+        "boost": "50000000",
+        "feeGas": 4207125,
+        "boostGas": 4207125,
+        "gas": 374080
+      }
+    ],
+    "span": {
+      "note": "flag 0x03 is brotli over this payload: the transactions' fields column by column, rebuilt and re-encoded by the decoder, which must reproduce them byte for byte",
+      "payload": "0xf8f6820303c8837001b6837001b6c28001c6825208825208ca84773594008477359400c8830f4240830f4240820000a8000000000000000000000000000000000000aa00000000000000000000000000000000000000aa01d087038d7ea4c6800087038d7ea4c68000c28080c481c081c0820000b840c778f212e1ae52a8c8eaf7f39f0f1efd0789ca3470e6f456889583b6899dbc47f8d3c3a85d772b3bf5dea71726a6a717f974ff043751580a9808b9f411c88b96b8402e64b62519af39599e2d0ab3288db95293cd994492b47159e525b319d24ebda3252db3af5bf94673931c7ba63012dddaa7d4902ea00f840461375bb19c7e34bb",
+      "txs": [
+        "0x02f873837001b680830f4240847735940082520894000000000000000000000000000000000000aa0087038d7ea4c6800080c080a0c778f212e1ae52a8c8eaf7f39f0f1efd0789ca3470e6f456889583b6899dbc47a02e64b62519af39599e2d0ab3288db95293cd994492b47159e525b319d24ebda3",
+        "0x02f873837001b601830f4240847735940082520894000000000000000000000000000000000000aa0187038d7ea4c6800080c080a0f8d3c3a85d772b3bf5dea71726a6a717f974ff043751580a9808b9f411c88b96a0252db3af5bf94673931c7ba63012dddaa7d4902ea00f840461375bb19c7e34bb"
+      ]
+    },
+    "feeSplit": {
+      "splitter": "0xe5e7d41F617F5CDa650d6485056F55f766cB5fC0",
+      "salt": "0xb28e5249a2e746d5e9023d5469587ccfbd1ad69bc5d9916fe71ab71dbd51e7a1",
+      "initCodeHash": "0xa1d2d241ed6dbe434bc99b7bebee1494d25d5e712d59bc2c780dd59bb33e9722",
+      "burnAddress": "0x000000000000000000000000000000000000dEaD",
+      "momentum": 2001,
+      "relayers": [
+        "0x00203A7517DC5C55916F06b3d64c1fE3Af62Eefc",
+        "0x0085aD6789cD9c9E86b963F1576547467F4747D8"
+      ],
+      "weights": [
+        200000,
+        100000
+      ],
+      "calldata": "0xde03063700000000000000000000000000000000000000000000000000000000000007d1000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000203a7517dc5c55916f06b3d64c1fe3af62eefc0000000000000000000000000085ad6789cd9c9e86b963f1576547467f4747d800000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000030d4000000000000000000000000000000000000000000000000000000000000186a0",
+      "gas": 170000
+    },
+    "burnMagic": "0x5a564d42",
+    "chunkGas": {
+      "note": "gas(assemble) = (plasma(assemble) + Σ plasma(chunk)) × gasPerPlasma, each chunk spent once; a chunk's plasma is recomputed from its bytes, not read from a stored field",
+      "chunkBytes": 16383,
+      "chunkPlasma": 1135112,
+      "assemblePlasma": 25692,
+      "gasBeforeTheFork": 411072,
+      "gasAfterTheFork": 16777216
+    }
+  },
+  "exchange": {
+    "note": "EIP-712 order hashing: the same order must hash the same in the node, the browser and ZVMExchange. A bulk listing is one signature over the Merkle root of many orders, each filled with its own proof.",
+    "orderTypeHash": "0x6470a9987cd33bf91d26c1f1729a68a1cfcb3ed09bc275e851fd04d621b5d35d",
+    "rootTypeHash": "0x0ff7ab8f4392851823fd42da126fcb923472e7a9973e4b20c1620405f9ece22a",
+    "chainId": 7340470,
+    "exchange": "0x00000000000000000000000000000000000e5c4a",
+    "domainSeparator": "0x269fccb54b27db6c6b9a4b573580b1cef3affa7ab51657e3c16ea7f29fa708d1",
+    "orders": [
+      {
+        "name": "listing in ZNN",
+        "order": {
+          "trader": "0x00f0a53fa26c0a556f7af533bd6d30d2922b269b",
+          "side": 0,
+          "collection": "0x00000000000000000000000000000000c0113c71",
+          "tokenId": "1",
+          "anyToken": false,
+          "amount": "1",
+          "paymentToken": "0x0000000000000000000000000000000000000000",
+          "price": "5000000000000000000",
+          "listingTime": 1789000000,
+          "expirationTime": 1789600000,
+          "nonce": "0",
+          "salt": "7919"
+        },
+        "hash": "0x3eae298faef280611b2cbd935f930690dc443492a8e82013a6c0aba59546c562",
+        "digest": "0xe6aea7db11b0cd90f4b7d00f689ca6c68f97df303fb818ee76966c4fd7dd0447"
+      },
+      {
+        "name": "listing in QSR",
+        "order": {
+          "trader": "0x008cce716db717f813f8c0cf06c23197dc98c091",
+          "side": 0,
+          "collection": "0x00000000000000000000000000000000c0113c71",
+          "tokenId": "2",
+          "anyToken": false,
+          "amount": "1",
+          "paymentToken": "0x4200000000000000000000000000000000000101",
+          "price": "9000000000000000000",
+          "listingTime": 1789000000,
+          "expirationTime": 1789600000,
+          "nonce": "0",
+          "salt": "15838"
+        },
+        "hash": "0x5d9951bba6caefb7416853b0328f231257d28f0019b4811067afe254f6eacb3b",
+        "digest": "0xa5b9903b3e96f59369f65ff0bd1d49d62452d73e7263cd4e796520e57a45f55b"
+      },
+      {
+        "name": "collection bid",
+        "order": {
+          "trader": "0x005c6e612dbad1051e2e8184ccc1784acfa9ad1c",
+          "side": 1,
+          "collection": "0x00000000000000000000000000000000c0113c71",
+          "tokenId": "3",
+          "anyToken": true,
+          "amount": "1",
+          "paymentToken": "0x4200000000000000000000000000000000000101",
+          "price": "4000000000000000000",
+          "listingTime": 1789000000,
+          "expirationTime": 1789600000,
+          "nonce": "0",
+          "salt": "23757"
+        },
+        "hash": "0x37950370116277ad5ccd0256f58eb757868356b251d6d9741e16a53d80fdb03e",
+        "digest": "0xf6d2848a40dd56a82fe1b42a3ac6104c7d78c6bc35b83fedc9cb4fb7ce019bf1"
+      }
+    ],
+    "bulk": {
+      "root": "0x4c9186dbdd050e7c553b03f689e1f54f861147bc2815e6e919f56ebc04032696",
+      "digest": "0x41cfbb5c67f792028f9110d272ecbb013bb652aee4dceabed483882309a0a8b6",
+      "leaves": [
+        "0x3eae298faef280611b2cbd935f930690dc443492a8e82013a6c0aba59546c562",
+        "0x5d9951bba6caefb7416853b0328f231257d28f0019b4811067afe254f6eacb3b",
+        "0x37950370116277ad5ccd0256f58eb757868356b251d6d9741e16a53d80fdb03e"
+      ],
+      "proofs": [
+        [
+          "0x5d9951bba6caefb7416853b0328f231257d28f0019b4811067afe254f6eacb3b",
+          "0x37950370116277ad5ccd0256f58eb757868356b251d6d9741e16a53d80fdb03e"
+        ],
+        [
+          "0x3eae298faef280611b2cbd935f930690dc443492a8e82013a6c0aba59546c562",
+          "0x37950370116277ad5ccd0256f58eb757868356b251d6d9741e16a53d80fdb03e"
+        ],
+        [
+          "0x61721e70aad8c43d27a277543e34d42fbe98f9f80f32b71afbf00fa931713154"
+        ]
+      ]
+    }
+  }
+}

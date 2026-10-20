@@ -1,0 +1,71 @@
+{
+  "l1ChainId": 70,
+  "l2ChainId": 7340470,
+  "inbox": "z1zvmxxxxxxxxxxxxxxxxxxxxxxxxxxxxxafdtd6",
+  "vault": "z1qqtvzd4x2n729hwc777cusvr7u6z4uzzq8aq6z",
+  "l1StartHeight": 2,
+  "l2GenesisHash": "0xb1cc9f083469c2cf4b6f46fe2278681d10d54f4d55f864b9d6e50c0847b36376",
+  "l2GenesisTimestamp": 1789581890,
+  "gasLimit": 300000000,
+  "gasPerPlasma": 16,
+  "maxNativeGas": 16777216,
+  "maxNativeGasPerBlock": 150000000,
+  "nativeFloorBp": 2500,
+  "nativeCeilBp": 7500,
+  "mandatoryShareBp": 5000,
+  "maxTxGas": 16777216,
+  "maxDepositCallGas": 1000000,
+  "chunkTtl": 8640,
+  "maxAssembledBytes": 524288,
+  "maxBatchBytes": 4194304,
+  "finalityDepth": 6,
+  "fee": {
+    "fromHeight": 10,
+    "gasPerSupply": 115000000000000,
+    "genesisTimestamp": 1789581890,
+    "refEpoch": 0,
+    "refZnn": "1637500000000000",
+    "refQsr": "16176400000000000"
+  },
+  "forks": {
+    "gas": 200,
+    "wire": 200
+  },
+  "feeSplitter": "0xe5e7d41f617f5cda650d6485056f55f766cb5fc0",
+  "evm": "karst",
+  "minBaseFee": 1000000,
+  "bridgeFee": {
+    "bps": 25,
+    "minZnn": 1000000,
+    "minQsr": 10000000
+  },
+  "feeMarket": [
+    {
+      "momentum": 1440,
+      "denominator": 25,
+      "elasticity": 30
+    },
+    {
+      "momentum": 1510,
+      "denominator": 8,
+      "elasticity": 30
+    },
+    {
+      "momentum": 1560,
+      "denominator": 6,
+      "elasticity": 2
+    },
+    {
+      "momentum": 1680,
+      "denominator": 6,
+      "elasticity": 2,
+      "minBaseFee": 150000000000
+    },
+    {
+      "momentum": 1830,
+      "denominator": 6,
+      "elasticity": 4,
+      "minBaseFee": 150000000000
+    }
+  ]
+}

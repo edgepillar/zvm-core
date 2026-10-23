@@ -1,7 +1,6 @@
 package rollup
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/big"
 
@@ -315,9 +314,13 @@ func (f *Fee) GasFor(amount *big.Int, zts znn.TokenStandard, epoch uint64, price
 func (f *Fee) UnmarshalJSON(b []byte) error {
 	type raw Fee
 	var r raw
-	if err := json.Unmarshal(b, &r); err != nil {
+	if err := decodeConfigJSON(b, &r); err != nil {
 		return err
 	}
-	*f = Fee(r)
-	return f.prepare()
+	parsed := Fee(r)
+	if err := parsed.prepare(); err != nil {
+		return err
+	}
+	*f = parsed
+	return nil
 }

@@ -3,9 +3,11 @@
 package rollup
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"math/big"
 	"os"
@@ -376,13 +378,31 @@ func (c *Config) MomentumForL2Block(number uint64) uint64 {
 	return c.L1StartHeight + number - 1
 }
 
+// decodeConfigJSON accepts one complete value with no unknown struct fields.
+// Custom decoders must use it too: DisallowUnknownFields does not inspect the
+// object consumed by a nested UnmarshalJSON method.
+func decodeConfigJSON(raw []byte, out any) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(out); err != nil {
+		return err
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		if err != nil {
+			return fmt.Errorf("trailing configuration data: %w", err)
+		}
+		return fmt.Errorf("trailing configuration value")
+	}
+	return nil
+}
+
 func Load(path string) (*Config, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 	var c Config
-	if err := json.Unmarshal(raw, &c); err != nil {
+	if err := decodeConfigJSON(raw, &c); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	if c.L1StartHeight == 0 || c.GasLimit == 0 || c.L2ChainID == 0 {

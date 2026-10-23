@@ -1,5 +1,16 @@
 # @zvm/web
 
+Address input policy: NoM strings use BIP-173 checksums and may be uniformly
+lowercase or uppercase; mixed case is rejected. Hex inputs must contain exactly
+40 ASCII hexadecimal digits, with an optional `0x`/`0X` prefix for `hexToNom`.
+`toEvmAddress` trims surrounding whitespace and accepts prefixed hex or NoM.
+`isNomUser` requires a complete prefixed hex address with the user type byte.
+Hex syntax validation does not verify an EIP-55 checksum.
+
+Run `npm --prefix web test` from the repository root with Node.js 22.6 or newer.
+The tests use Node's built-in type stripping and need no installed dependencies.
+They share `vectors/address-vectors.json` with the Go client.
+
 The parts of a ZVM web app that must not differ between apps.
 
 The ZVM's front ends (`zvm-explorer`, `zvm-glyphswap`, `zvm-nft`, `zvm-karum`,

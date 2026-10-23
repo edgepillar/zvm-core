@@ -47,6 +47,9 @@ function convertBits(data: number[], from: number, to: number, pad: boolean): nu
 
 export function decodeBech32(s: string): {hrp: string; bytes: Uint8Array} {
   if (s.length > 90) throw new Error('bech32: too long')
+  // Check before case folding: Unicode characters such as the Kelvin sign
+  // lowercase to ASCII and must not become valid address/checksum characters.
+  if (/[^\x21-\x7e]/.test(s)) throw new Error('bech32: invalid character')
   if (s !== s.toLowerCase() && s !== s.toUpperCase()) throw new Error('bech32: mixed case')
   s = s.toLowerCase()
   const sep = s.lastIndexOf('1')
@@ -73,7 +76,7 @@ export function encodeBech32(hrp: string, bytes: Uint8Array): string {
 export function isNomAddress(s: string): boolean {
   if (!s?.toLowerCase().startsWith('z1')) return false
   try {
-    const {hrp, bytes} = decodeBech32(s.toLowerCase())
+    const {hrp, bytes} = decodeBech32(s)
     return hrp === 'z' && bytes.length === 20
   } catch {
     return false
@@ -81,14 +84,14 @@ export function isNomAddress(s: string): boolean {
 }
 
 export function nomToHex(s: string): `0x${string}` {
-  const {hrp, bytes} = decodeBech32(s.toLowerCase())
+  const {hrp, bytes} = decodeBech32(s)
   if (hrp !== 'z' || bytes.length !== 20) throw new Error('not a NoM address')
   return `0x${[...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')}` as `0x${string}`
 }
 
 export function hexToNom(hex: string): string {
-  const clean = hex.replace(/^0x/, '')
-  if (clean.length !== 40) throw new Error('not a 20-byte address')
+  const clean = hex.replace(/^0x/i, '')
+  if (clean.length !== 40 || !/^[0-9a-fA-F]{40}$/.test(clean)) throw new Error('not a 20-byte address')
   const bytes = new Uint8Array(20)
   for (let i = 0; i < 20; i++) bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16)
   return encodeBech32('z', bytes)
@@ -98,11 +101,11 @@ export function hexToNom(hex: string): string {
 export function toEvmAddress(s: string): `0x${string}` {
   const trimmed = s.trim()
   if (isNomAddress(trimmed)) return nomToHex(trimmed)
-  if (/^0x[0-9a-fA-F]{40}$/.test(trimmed)) return trimmed.toLowerCase() as `0x${string}`
+  if (/^0x[0-9a-fA-F]{40}$/i.test(trimmed)) return trimmed.toLowerCase() as `0x${string}`
   throw new Error('not an address')
 }
 
 /** True when these 20 bytes are a NoM account a key can sign for. */
 export function isNomUser(hexAddress: string): boolean {
-  return /^0x00/i.test(hexAddress)
+  return hexAddress.length === 42 && /^0x00[0-9a-fA-F]{38}$/i.test(hexAddress)
 }

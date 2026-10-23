@@ -6,6 +6,9 @@
   "description": "The part of a ZVM web app that must not differ between apps: the chain definition, address encoding, number formatting and the shared marks.",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.mjs"
+  },
   "peerDependencies": {
     "viem": "^2.56.5",
     "vue": "^3.5.13"

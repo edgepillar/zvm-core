@@ -97,6 +97,13 @@ func DecodeBech32(s string) (string, []byte, error) {
 	if len(s) > 90 {
 		return "", nil, errors.New("bech32: string longer than 90 characters")
 	}
+	// Reject non-ASCII before case folding: a Unicode lookalike must not
+	// normalize into a valid address or checksum character.
+	for i := 0; i < len(s); i++ {
+		if s[i] < 33 || s[i] > 126 {
+			return "", nil, errors.New("bech32: invalid character")
+		}
+	}
 	if strings.ToLower(s) != s && strings.ToUpper(s) != s {
 		return "", nil, errors.New("bech32: mixed case")
 	}

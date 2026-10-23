@@ -1,0 +1,75 @@
+{
+  "description": "Synthetic shared Go and TypeScript address vectors; no keys or wallet material. Uniform Bech32 case only; hex encodings are lowercase.",
+  "valid": [
+    {
+      "name": "zero",
+      "hex": "0x0000000000000000000000000000000000000000",
+      "nom": "z1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqsggv2f",
+      "isUser": true
+    },
+    {
+      "name": "user-sequence",
+      "hex": "0x00112233445566778899aabbccddeeff00112233",
+      "nom": "z1qqgjyv6y24n80zye42aueh0wluqpzg3nc4up7f",
+      "isUser": true
+    },
+    {
+      "name": "contract-sequence",
+      "hex": "0x01112233445566778899aabbccddeeff00112233",
+      "nom": "z1qygjyv6y24n80zye42aueh0wluqpzg3npymrx2",
+      "isUser": false
+    },
+    {
+      "name": "all-ones",
+      "hex": "0xffffffffffffffffffffffffffffffffffffffff",
+      "nom": "z1lllllllllllllllllllllllllllllllluefrdr",
+      "isUser": false
+    },
+    {
+      "name": "lookalike-corpus",
+      "hex": "0xb5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5",
+      "nom": "z1kk6mtdd4kk6mtdd4kk6mtdd4kk6mtdd4zrh0dz",
+      "isUser": false
+    }
+  ],
+  "invalidNom": [
+    {
+      "name": "mixed-case",
+      "value": "Z1qqgjyv6y24n80zye42aueh0wluqpzg3nc4up7f"
+    },
+    {
+      "name": "checksum-mutation",
+      "value": "z1qqgjyv6y24n80zye42aueh0wluqpzg3nc4up7q"
+    },
+    {
+      "name": "wrong-prefix",
+      "value": "znn1qqgjyv6y24n80zye42aueh0wluqpzg3nc8wlu6"
+    },
+    {
+      "name": "nineteen-bytes",
+      "value": "z1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq9z57le"
+    },
+    {
+      "name": "twenty-one-bytes",
+      "value": "z1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqsdg628"
+    },
+    {
+      "name": "truncated",
+      "value": "z1qqgjyv6y24n80zye42aueh0wluqpzg3nc4up7"
+    },
+    {
+      "name": "trailing-newline",
+      "value": "z1qqgjyv6y24n80zye42aueh0wluqpzg3nc4up7f\n",
+      "trimmedHex": "0x00112233445566778899aabbccddeeff00112233"
+    },
+    {
+      "name": "non-ascii-case-fold",
+      "value": "Z1\u212aK6MTDD4KK6MTDD4KK6MTDD4KK6MTDD4ZRH0DZ"
+    }
+  ],
+  "invalidPrefix": [
+    " 1nwldj5",
+    "\u007f1axkwrx",
+    "a\n1qryu8w"
+  ]
+}

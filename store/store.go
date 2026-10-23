@@ -300,21 +300,24 @@ func (d *DB) RewindTo(height uint64) error {
 }
 
 // Chunk implements derive.ChunkSource.
-func (d *DB) Chunk(hash znn.Hash) (*derive.Chunk, bool) {
+func (d *DB) Chunk(hash znn.Hash) (*derive.Chunk, bool, error) {
 	var author string
 	var height uint64
 	var data []byte
 	var consumedAt sql.NullInt64
 	err := d.db.QueryRow("SELECT author, momentum, data, consumed_at FROM chunks WHERE hash = ?", hash.String()).
 		Scan(&author, &height, &data, &consumedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false, nil
+	}
 	if err != nil {
-		return nil, false
+		return nil, false, fmt.Errorf("read chunk %s: %w", hash, err)
 	}
 	a, err := znn.ParseAddress(author)
 	if err != nil {
-		return nil, false
+		return nil, false, fmt.Errorf("decode chunk %s author: %w", hash, err)
 	}
-	return &derive.Chunk{Hash: hash, Author: a, Height: height, Data: data, Consumed: consumedAt.Valid}, true
+	return &derive.Chunk{Hash: hash, Author: a, Height: height, Data: data, Consumed: consumedAt.Valid}, true, nil
 }
 
 // Deferred implements derive.DeferralSource: the mandatory messages momentums

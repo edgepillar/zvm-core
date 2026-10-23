@@ -63,9 +63,11 @@ type Chunk struct {
 // one re-deriving today.
 func (c *Chunk) Plasma() uint64 { return znn.BaseSendPlasma(len(c.Data) + 1) }
 
-// ChunkSource resolves chunks published in earlier momentums.
+// ChunkSource resolves chunks published in earlier momentums. A missing chunk
+// returns (nil, false, nil); storage and decoding failures return an error.
+// Operational failures must stop derivation, never classify a message invalid.
 type ChunkSource interface {
-	Chunk(hash znn.Hash) (*Chunk, bool)
+	Chunk(hash znn.Hash) (*Chunk, bool, error)
 }
 
 // DeferredBlock is a mandatory message an earlier momentum had no room for.
@@ -312,7 +314,9 @@ func BuildPlan(cfg *rollup.Config, dm *znn.DetailedMomentum, chunks ChunkSource)
 		case KindPayout, KindBurn, KindDeposit, KindFuse:
 			p.mandatoryMessage(i, b, 0)
 		case "inbox":
-			p.inbox(i, b)
+			if err := p.inbox(i, b); err != nil {
+				return nil, fmt.Errorf("momentum %d: %w", m.Height, err)
+			}
 		}
 	}
 
@@ -681,7 +685,7 @@ func DepositCallTx(cfg *rollup.Config, b *znn.AccountBlock, c Call) *types.Trans
 	})
 }
 
-func (p *Plan) inbox(i int, b *znn.AccountBlock) {
+func (p *Plan) inbox(i int, b *znn.AccountBlock) error {
 	msg := p.newMessage(i, b, "")
 	// Value sent to the inbox is unspendable by anyone (its type byte is one
 	// no key can produce), so it is burned whatever the message turns out to
@@ -691,7 +695,7 @@ func (p *Plan) inbox(i int, b *znn.AccountBlock) {
 	}
 	if len(b.Data) == 0 {
 		msg.Kind, msg.Status, msg.Reason = KindCall, StatusInvalid, "empty data"
-		return
+		return nil
 	}
 	switch b.Data[0] {
 	case MsgCall:
@@ -708,10 +712,11 @@ func (p *Plan) inbox(i int, b *znn.AccountBlock) {
 		msg.Status = StatusStored
 	case MsgAssemble:
 		msg.Kind = KindAssemble
-		p.assemble(msg, b)
+		return p.assemble(msg, b)
 	default:
 		msg.Status, msg.Reason = StatusInvalid, fmt.Sprintf("unknown message type 0x%02x", b.Data[0])
 	}
+	return nil
 }
 
 // call prices a native call and offers it for admission. plasma is what the
@@ -818,11 +823,11 @@ func (p *Plan) indexOf(msg *Message) int {
 	return -1
 }
 
-func (p *Plan) assemble(msg *Message, b *znn.AccountBlock) {
+func (p *Plan) assemble(msg *Message, b *znn.AccountBlock) error {
 	hashes, err := DecodeAssemble(b.Data[1:])
 	if err != nil {
 		msg.Status, msg.Reason = StatusInvalid, err.Error()
-		return
+		return nil
 	}
 	var joined []byte
 	plasma := b.UsedPlasma
@@ -830,21 +835,27 @@ func (p *Plan) assemble(msg *Message, b *znn.AccountBlock) {
 	for _, h := range hashes {
 		c, ok := p.local[h]
 		if !ok && p.chunks != nil {
-			c, ok = p.chunks.Chunk(h)
+			c, ok, err = p.chunks.Chunk(h)
+			if err != nil {
+				return fmt.Errorf("reading chunk %s: %w", h, err)
+			}
+			if ok && c == nil {
+				return fmt.Errorf("reading chunk %s: source returned a nil stored chunk", h)
+			}
 		}
 		switch {
 		case !ok:
 			msg.Status, msg.Reason = StatusInvalid, "unknown chunk "+h.String()
-			return
+			return nil
 		case c.Author != b.Address:
 			msg.Status, msg.Reason = StatusInvalid, "chunk "+h.String()+" was published by another account"
-			return
+			return nil
 		case c.Height > p.Momentum.Height || p.Momentum.Height-c.Height > p.cfg.ChunkTTL:
 			msg.Status, msg.Reason = StatusInvalid, "chunk "+h.String()+" has expired"
-			return
+			return nil
 		case p.gasFork && (c.Consumed || p.claimed[h]):
 			msg.Status, msg.Reason = StatusInvalid, "chunk "+h.String()+" has already been assembled"
-			return
+			return nil
 		}
 		if p.gasFork {
 			// The whole payload's plasma buys the gas, each chunk once.
@@ -855,14 +866,14 @@ func (p *Plan) assemble(msg *Message, b *znn.AccountBlock) {
 		joined = append(joined, c.Data...)
 		if len(joined) > p.cfg.MaxAssembledBytes {
 			msg.Status, msg.Reason = StatusInvalid, "assembled payload too large"
-			return
+			return nil
 		}
 	}
 	msg.Bytes = len(joined)
 	msg.Plasma = plasma
 	if len(joined) == 0 {
 		msg.Status, msg.Reason = StatusInvalid, "assembled payload is empty"
-		return
+		return nil
 	}
 	if len(used) > 0 {
 		p.chunkClaims = append(p.chunkClaims, &chunkClaim{msg: msg, chunks: used})
@@ -875,6 +886,7 @@ func (p *Plan) assemble(msg *Message, b *znn.AccountBlock) {
 	default:
 		msg.Status, msg.Reason = StatusInvalid, "an assembled payload must be a call or a batch"
 	}
+	return nil
 }
 
 // collectChunks decides which chunks this momentum actually spent: those

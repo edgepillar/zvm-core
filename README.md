@@ -38,6 +38,12 @@ to environment variables: `NOM_NODE` (a NoM node), `ZVM_RPC` (the ZVM's
 JSON-RPC), `ZVM_NODE` (a node's read API), `ZVM_RELAYER`. `.env.example` has
 a local [zvm-devnet](https://github.com/Zenoglyphs-VM/zvm-devnet)'s.
 
+Chunk-source implementations return a separate storage error alongside the
+chunk and presence flag. Genuine absence keeps the existing invalid-message
+rule; a SQL or decode failure aborts the plan and must be repaired or retried
+before the node advances. Consumers implementing `derive.ChunkSource` must
+update their method signature when adopting this revision.
+
 A change to `derive` changes what block a momentum means: it is a hard fork,
 whether or not anyone calls it one.
 

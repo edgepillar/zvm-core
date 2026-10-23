@@ -16,7 +16,7 @@ type memQueue struct {
 	released map[znn.Hash]uint64
 }
 
-func (q *memQueue) Chunk(znn.Hash) (*Chunk, bool) { return nil, false }
+func (q *memQueue) Chunk(znn.Hash) (*Chunk, bool, error) { return nil, false, nil }
 
 func (q *memQueue) Deferred(before uint64) ([]*DeferredBlock, error) {
 	var out []*DeferredBlock

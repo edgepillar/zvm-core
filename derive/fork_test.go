@@ -229,7 +229,7 @@ func TestChunkGasCountsTheWholePayload(t *testing.T) {
 // chunk was already spent by an earlier momentum.
 type fakeChunks map[znn.Hash]*Chunk
 
-func (f fakeChunks) Chunk(h znn.Hash) (*Chunk, bool) { c, ok := f[h]; return c, ok }
+func (f fakeChunks) Chunk(h znn.Hash) (*Chunk, bool, error) { c, ok := f[h]; return c, ok, nil }
 
 func TestChunkIsSpentOnce(t *testing.T) {
 	cfg := gasForkConfig(t)

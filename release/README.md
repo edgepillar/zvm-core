@@ -265,6 +265,43 @@ constructor, initialize a clone or attest live implementation code. Qualify
 source-bound constructor/storage/clone behavior separately and provision real
 release authority independently.
 
+- `farm-reward-token` declares `rewardTokenContract`. The reward token word is
+  the canonical address of that separately inventoried release contract.
+- `uniswap-v2-router02` declares `factoryContract` and `wethContract`. The
+  factory must be a declared `contracts/UniswapV2Factory.sol:UniswapV2Factory`
+  target with an `exact` context. Both addresses come from the complete release
+  inventory; the Router02 constructor does not call either counterpart.
+- `farm-fee-strategy` declares `farmContract`, `routerContract`,
+  `factoryContract`, and `wethContract`. The farm must have a
+  `farm-reward-token` context and the router must have a `uniswap-v2-router02`
+  context, with their exact source-unit/contract roles. Router and strategy
+  factory/WETH identity fields must agree. The strategy reward token is derived
+  from the farm's declared reward identity, matching the reviewed constructor's
+  `farm_.rewardToken()` call. No independent returned word is accepted. These
+  subjects may belong to different Solidity builds; every subject is verified
+  before the complete policy can succeed.
+- `exchange-eip712-domain` has only the common `kind` and
+  `runtimeTemplateSha256` fields. It derives the seven OpenZeppelin EIP-712
+  cached domain/chain/address, hashed name/version, and ShortString words from
+  the release epoch chain ID, the exchange release address, and the reviewed
+  `ZVM Exchange` / `1` literals. A caller cannot override the chain or words.
+
+These four contexts require the exact reviewed application/Router02 source
+digests in `contractbuild_application.go`; the exchange also requires the
+reviewed EIP712 and ShortStrings sources. Saved compiler AST declarations must
+bind immutable IDs to the matching contract scopes, source file IDs, bounded
+byte spans and declaration text. IDs are derived from those declarations,
+rather than supplied by the policy. A source-version change needs a separately
+reviewed derivation. The source fingerprints establish the supported literal
+algorithm; the verifier does not evaluate arbitrary constructor expressions.
+
+The source and AST checks operate on saved compiler material and do not execute
+the compiler or a constructor. Constructor/storage witnesses remain separate.
+Counterpart identity consistency is not acceptance of ERC-20 behavior, DEX
+operations, funding, operator policy or an actual deployment. The exchange
+context describes construction in the declared release epoch; a different
+historical cached chain requires a separate reviewed witness.
+
 The complete compiler reference map must equal the declared binding inventory.
 Every range is exactly 32 bytes, non-overlapping and zero in the original
 template. IDs and range fields are canonical and case-sensitive; at most 256

@@ -122,6 +122,7 @@ func (m Manifest) verifyTypedContractBuilds(raw []byte, files, sources *os.Root)
 	packages := newBuildPackageReader(files, sources, byID)
 	var ids, targets []string
 	var checks []func() error
+	subjects := map[string]applicationBuildSubject{}
 	seenBundles := map[string]bool{}
 	var bundleBytes int64
 	addBundle := func(id string) error {
@@ -160,13 +161,19 @@ func (m Manifest) verifyTypedContractBuilds(raw []byte, files, sources *os.Root)
 					return 0, errors.New("runtime context omitted a release contract")
 				}
 				targets = append(targets, target.Contract)
+				subjects[target.Contract] = applicationBuildSubject{Target: target, Context: definition.RuntimeContexts[target.Contract]}
 			}
 			checks = append(checks, func() error {
 				resolve := func(target ContractBuildTarget, contract Contract, bytecode buildBytecode, runtime []byte, output *buildOutput) ([]byte, error) {
 					var fields map[string]json.RawMessage
 					var kind string
-					if json.Unmarshal(definition.RuntimeContexts[target.Contract], &fields) == nil && json.Unmarshal(fields["kind"], &kind) == nil && kind == "collection-factory-implementation" {
-						return m.resolveCollectionFactoryRuntime(definition.RuntimeContexts[target.Contract], target, contract, bytecode, runtime, build, definition.RuntimeContexts, output)
+					if json.Unmarshal(definition.RuntimeContexts[target.Contract], &fields) == nil && json.Unmarshal(fields["kind"], &kind) == nil {
+						if applicationRuntimeKind(kind) {
+							return m.resolveApplicationRuntime(definition.RuntimeContexts[target.Contract], target, contract, bytecode, runtime, output, subjects)
+						}
+						if kind == "collection-factory-implementation" {
+							return m.resolveCollectionFactoryRuntime(definition.RuntimeContexts[target.Contract], target, contract, bytecode, runtime, build, definition.RuntimeContexts, output)
+						}
 					}
 					return m.resolveBuildRuntime(definition.RuntimeContexts[target.Contract], target, contract, bytecode, runtime)
 				}

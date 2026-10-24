@@ -74,8 +74,9 @@ type buildInput struct {
 }
 
 type buildOutput struct {
-	raw       json.RawMessage
-	Contracts map[string]map[string]struct {
+	raw          json.RawMessage
+	inputSources map[string]string
+	Contracts    map[string]map[string]struct {
 		Metadata      string          `json:"metadata"`
 		StorageLayout json.RawMessage `json:"storageLayout"`
 		EVM           struct {
@@ -301,6 +302,7 @@ func (m Manifest) verifySolidityBuild(build ContractBuild, files, sources *os.Ro
 		return errors.New("compiler output/source inventory is missing")
 	}
 	output.raw = bundle.Output
+	output.inputSources = contents
 	seenIDs := map[int]bool{}
 	for unit, source := range output.Sources {
 		_, present := contents[unit]

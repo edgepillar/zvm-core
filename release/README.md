@@ -216,6 +216,42 @@ The deterministic assertion vector is fixture-only and is checked by the Go
 assertion tests. Its keys must never be used as operator trust keys. Browser
 verification and application integration require separate implementation and checks.
 
+## Release-pinned protocol stop policies
+
+`DecodeProtocolConfiguration` accepts the same four independent release inputs,
+the exact startup rollup bytes, and an optional protocol policy. The signed
+manifest and the independently reviewed inventory must both include its file as
+`id: "protocol-activation-policy"`, `kind: "config"`. Its exact SHA-256 and byte
+count are checked. A declared policy cannot be silently omitted; an extra policy
+without the signed inventory entry is refused. A release without that entry
+remains supported, with protocol enforcement explicitly reported as disabled.
+
+The policy has `schema: 1`, `epochId`, `chainId`, `genesisHash`, `rollupSha256`
+and `requirements`. Identity fields must match the accepted release. Each
+requirement contains an ASCII `rule` identifier, a positive uint32 `version`
+and a positive uint64 activation `momentum`. At most 64 requirements and 64 KiB
+are accepted. Duplicate keys, aliases, unknown fields, trailing values, null
+scalars, duplicate activations and non-increasing versions are refused.
+Repeated requirements for one rule must increase in both version and height.
+
+Compiled capability version 1 describes the currently implemented `derivation`,
+`evm-isthmus`, `evm-karst`, `gas`, `wire`, `native-fee` and `fee-market` rule
+families. This is candidate implementation metadata, not an agreed global
+protocol version or evidence that a running execution client implements it.
+The policy must include the first activation of every enabled family at the
+height already fixed by the accepted rollup configuration. It cannot activate
+an implemented family that configuration disables. Future rule names or higher
+versions are stop conditions: `ProtocolGuard.Check` returns `ProtocolHalt` at
+their first unsupported momentum and every later momentum, before a consumer
+plans that block. It also refuses a changed normalized configuration.
+
+The guard and its snapshots retain independent copies. It does not change fork
+logic, authorize an activation, receive or authenticate a NoM upgrade notice, or
+establish a compiled real-chain activation table. Consumers must call it before
+planning and before any reconciliation that could modify an unsupported head.
+Real old/new-node fork rehearsals and independent deployment acceptance remain
+separate requirements. No operator policy or real network activation is shipped.
+
 ## Typed saved contract material (schema 2)
 
 The same signed `contract-build-policy` file may explicitly select schema 2.

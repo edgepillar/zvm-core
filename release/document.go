@@ -12,6 +12,10 @@ func ReadDocument(name string) ([]byte, error) {
 	return readBoundedDocument(name, MaxDocumentBytes)
 }
 
+func ReadProtocolPolicyDocument(name string) ([]byte, error) {
+	return readBoundedDocument(name, MaxProtocolPolicyBytes)
+}
+
 func readBoundedDocument(name string, limit int) ([]byte, error) {
 	info, err := os.Lstat(name)
 	if err != nil || !info.Mode().IsRegular() || info.Size() > int64(limit) {

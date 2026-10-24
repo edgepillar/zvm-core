@@ -48,3 +48,11 @@ each as a git submodule at `./zvm-core`.
 
 MIT licence; third-party bytecode is listed in [NOTICE.md](NOTICE.md). The
 full guide, with how it works and why: [docs/GUIDE.md](docs/GUIDE.md).
+
+## Offline release verification
+
+The optional `zvm release-message` and `zvm release-verify` commands bind signed
+release inventories to source, artifact, genesis and saved contract build inputs.
+See [the release verification guide](release/README.md) for the independent policy
+and trust inputs, supported material formats and acceptance limits. These commands
+do not publish a release or establish a running deployment.

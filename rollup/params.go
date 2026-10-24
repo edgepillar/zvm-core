@@ -401,21 +401,29 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parse(raw, path)
+}
+
+// Parse validates the same complete configuration as Load, from retained
+// bytes. Offline release verification must not reopen a different path.
+func Parse(raw []byte) (*Config, error) { return parse(raw, "rollup") }
+
+func parse(raw []byte, label string) (*Config, error) {
 	var c Config
 	if err := decodeConfigJSON(raw, &c); err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return nil, fmt.Errorf("%s: %w", label, err)
 	}
 	if c.L1StartHeight == 0 || c.GasLimit == 0 || c.L2ChainID == 0 {
-		return nil, fmt.Errorf("%s: incomplete rollup config", path)
+		return nil, fmt.Errorf("%s: incomplete rollup config", label)
 	}
 	if err := c.Fee.prepare(); err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return nil, fmt.Errorf("%s: %w", label, err)
 	}
 	if c.Fee.Active(c.L1StartHeight) && c.MaxDepositCallGas == 0 {
-		return nil, fmt.Errorf("%s: maxDepositCallGas is required once the fee rule is active", path)
+		return nil, fmt.Errorf("%s: maxDepositCallGas is required once the fee rule is active", label)
 	}
 	if err := c.CheckForks(); err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return nil, fmt.Errorf("%s: %w", label, err)
 	}
 	return &c, nil
 }

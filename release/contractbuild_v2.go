@@ -162,7 +162,12 @@ func (m Manifest) verifyTypedContractBuilds(raw []byte, files, sources *os.Root)
 				targets = append(targets, target.Contract)
 			}
 			checks = append(checks, func() error {
-				resolve := func(target ContractBuildTarget, contract Contract, bytecode buildBytecode, runtime []byte) ([]byte, error) {
+				resolve := func(target ContractBuildTarget, contract Contract, bytecode buildBytecode, runtime []byte, output *buildOutput) ([]byte, error) {
+					var fields map[string]json.RawMessage
+					var kind string
+					if json.Unmarshal(definition.RuntimeContexts[target.Contract], &fields) == nil && json.Unmarshal(fields["kind"], &kind) == nil && kind == "collection-factory-implementation" {
+						return m.resolveCollectionFactoryRuntime(definition.RuntimeContexts[target.Contract], target, contract, bytecode, runtime, build, definition.RuntimeContexts, output)
+					}
 					return m.resolveBuildRuntime(definition.RuntimeContexts[target.Contract], target, contract, bytecode, runtime)
 				}
 				return m.verifySolidityBuild(build, files, sources, resolve, packages)
@@ -299,8 +304,12 @@ func (m Manifest) resolveBuildRuntime(raw json.RawMessage, target ContractBuildT
 	if kind == "exact" {
 		return runtime, nil
 	}
+	return bindBuildRuntimeWords(bytecode.ImmutableReferences, runtime, bindings)
+}
+
+func bindBuildRuntimeWords(raw json.RawMessage, runtime []byte, bindings map[string]common.Hash) ([]byte, error) {
 	var references map[string][]json.RawMessage
-	if json.Unmarshal(bytecode.ImmutableReferences, &references) != nil || references == nil || len(references) != len(bindings) {
+	if json.Unmarshal(raw, &references) != nil || references == nil || len(references) != len(bindings) {
 		return nil, errors.New("historical binding must cover the exact compiler immutable inventory")
 	}
 	wanted := bytes.Clone(runtime)

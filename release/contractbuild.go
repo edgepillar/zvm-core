@@ -74,6 +74,7 @@ type buildInput struct {
 }
 
 type buildOutput struct {
+	raw       json.RawMessage
 	Contracts map[string]map[string]struct {
 		Metadata      string          `json:"metadata"`
 		StorageLayout json.RawMessage `json:"storageLayout"`
@@ -230,7 +231,7 @@ func (m Manifest) verifyContractBuild(build ContractBuild, files, sources *os.Ro
 
 // A resolver is available only to the explicit schema-two policy. Schema one
 // always takes the nil path and retains its refusal of every immutable map.
-type contractRuntimeResolver func(ContractBuildTarget, Contract, buildBytecode, []byte) ([]byte, error)
+type contractRuntimeResolver func(ContractBuildTarget, Contract, buildBytecode, []byte, *buildOutput) ([]byte, error)
 
 func (m Manifest) verifySolidityBuild(build ContractBuild, files, sources *os.Root, resolve contractRuntimeResolver, packages *buildPackageReader) error {
 	byID := map[string]File{}
@@ -299,6 +300,7 @@ func (m Manifest) verifySolidityBuild(build ContractBuild, files, sources *os.Ro
 	if json.Unmarshal(bundle.Output, &output) != nil || len(output.Sources) != len(input.Sources) || len(output.Contracts) == 0 {
 		return errors.New("compiler output/source inventory is missing")
 	}
+	output.raw = bundle.Output
 	seenIDs := map[int]bool{}
 	for unit, source := range output.Sources {
 		_, present := contents[unit]
@@ -334,7 +336,7 @@ func (m Manifest) verifySolidityBuild(build ContractBuild, files, sources *os.Ro
 			return err
 		}
 		if resolve != nil {
-			runtime, err = resolve(target, contract, artifact.EVM.DeployedBytecode, runtime)
+			runtime, err = resolve(target, contract, artifact.EVM.DeployedBytecode, runtime, &output)
 			if err != nil {
 				return err
 			}

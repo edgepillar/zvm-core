@@ -249,6 +249,22 @@ of the complete unfilled compiler runtime. Only these contexts are accepted:
   be the explicit decimal string `"1"`; the child must be the release's canonical
   SenderCreator and equal `CREATE(entryPointAddress, 1)`.
 
+- `collection-factory-implementation` declares `immutable` and
+  `implementationContract`. It supports `apps/ZVMCollectionFactory.sol` and
+  `ZVMCollectionFactory`. The same build must include the named counterpart as
+  `apps/ZVMCollection.sol:ZVMCollection` with an `exact` runtime context. Its
+  nonzero release address supplies the complete address word. The saved compiler
+  output must retain the factory source AST under the exact `sources`/`ast`
+  fields. The AST must bind the public immutable address declaration to the
+  sole address constructor parameter through one direct assignment, without a
+  base constructor or modifier. Declaration IDs, scopes and source identities
+  must agree; arbitrary words and other constructor expressions are refused.
+
+The collection context checks saved material. It does not execute its
+constructor, initialize a clone or attest live implementation code. Qualify
+source-bound constructor/storage/clone behavior separately and provision real
+release authority independently.
+
 The complete compiler reference map must equal the declared binding inventory.
 Every range is exactly 32 bytes, non-overlapping and zero in the original
 template. IDs and range fields are canonical and case-sensitive; at most 256

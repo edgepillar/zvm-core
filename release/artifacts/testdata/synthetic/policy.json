@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "release": {
+    "id": "candidate-1",
+    "epochSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "qualificationSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "tag": "v0.1.0",
+    "tagCommit": "1111111111111111111111111111111111111111",
+    "source": {
+      "repository": "Example/project",
+      "commit": "1111111111111111111111111111111111111111",
+      "tree": "2222222222222222222222222222222222222222",
+      "gitlinks": []
+    }
+  },
+  "build": {
+    "workflowPath": ".github/workflows/release.yml",
+    "workflowCommit": "3333333333333333333333333333333333333333",
+    "recipeSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "environmentPolicySha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "flags": [
+      "-trimpath"
+    ],
+    "toolchains": [
+      {
+        "id": "go",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    ],
+    "images": [
+      {
+        "id": "builder",
+        "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      }
+    ],
+    "materials": [
+      {
+        "id": "source",
+        "sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "id": "linux-amd64",
+      "kind": "binary",
+      "platform": "linux/amd64",
+      "subjectPath": "bin/zvm-linux-amd64",
+      "sbomPath": "sbom/zvm.spdx.json",
+      "provenancePath": "provenance/zvm.jsonl"
+    }
+  ],
+  "checksumsPath": "SHA256SUMS",
+  "notesPath": "notes.md"
+}

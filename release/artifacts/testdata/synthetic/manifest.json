@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "policySha256": "f117574336d1f4528423645d39c26c41cf1fc6b5f35426598cd8ef3bec4c36c8",
+  "release": {
+    "id": "candidate-1",
+    "epochSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "qualificationSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "tag": "v0.1.0",
+    "tagCommit": "1111111111111111111111111111111111111111",
+    "source": {
+      "repository": "Example/project",
+      "commit": "1111111111111111111111111111111111111111",
+      "tree": "2222222222222222222222222222222222222222",
+      "gitlinks": []
+    }
+  },
+  "build": {
+    "workflowPath": ".github/workflows/release.yml",
+    "workflowCommit": "3333333333333333333333333333333333333333",
+    "recipeSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "environmentPolicySha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "flags": [
+      "-trimpath"
+    ],
+    "toolchains": [
+      {
+        "id": "go",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    ],
+    "images": [
+      {
+        "id": "builder",
+        "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      }
+    ],
+    "materials": [
+      {
+        "id": "source",
+        "sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "id": "linux-amd64",
+      "kind": "binary",
+      "platform": "linux/amd64",
+      "subjectPath": "bin/zvm-linux-amd64",
+      "sbomPath": "sbom/zvm.spdx.json",
+      "provenancePath": "provenance/zvm.jsonl"
+    }
+  ],
+  "checksumsPath": "SHA256SUMS",
+  "notesPath": "notes.md",
+  "files": [
+    {
+      "path": "SHA256SUMS",
+      "bytes": 333,
+      "sha256": "72f924d81c91f5417d1686b5d3d3f2dc248f8a31aa26e6325451a2e82c0d218f"
+    },
+    {
+      "path": "bin/zvm-linux-amd64",
+      "bytes": 38,
+      "sha256": "efdfbfd80a6dc463bec88f2e63d6c6895b0edcc3c29fc75eb2c91ca0972b4c12"
+    },
+    {
+      "path": "notes.md",
+      "bytes": 49,
+      "sha256": "86b58b5ab7b09d8e071c81c426561f45bcbc14ce036353926cd63ae31941da6f"
+    },
+    {
+      "path": "provenance/zvm.jsonl",
+      "bytes": 34,
+      "sha256": "1191e7556fdfe38b7d7237e21c6142ffef2596cc350eebc284ad4057755f5908"
+    },
+    {
+      "path": "sbom/zvm.spdx.json",
+      "bytes": 41,
+      "sha256": "c6eab6036790e0b6e3926e817cf0dc1f6a64409a1060de7dbbe057e4a8521cf7"
+    }
+  ]
+}

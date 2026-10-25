@@ -165,3 +165,14 @@ bytes per RLP header, controlled by `-max-context-bytes`, `-max-headers` and
 `-max-header-bytes`. JSON also has fixed nesting/token/array bounds. Whole native
 liability accounting and economic exclusions remain separate adoption gates;
 the bound sum still includes every account balance.
+
+For a local consumer that already holds accepted policy/checkpoint data,
+`-bundle-stdin` verifies one streamed input without temporary context files.
+It cannot be combined with root or context-file overrides. The frame starts with
+`5a 56 4d 53 4e 50 00 01`, a uint32 big-endian JSON byte length, then exactly one
+JSON object with required `schema`, `policy`, `snapshot` and `checkpoint` fields.
+`schema` is 1; `checkpoint` is null only for explicit bootstrap. The existing
+binary witness follows immediately and must end at EOF. The same context and
+witness limits apply. `EncodeInput` streams this format; `VerifyInput` validates
+it through the existing complete snapshot verifier. A frame supplies inputs,
+not independent authority, and a refused stream emits no successful record.

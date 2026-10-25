@@ -24,6 +24,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	snapshotPath := flags.String("snapshot", "", "bound snapshot context file")
 	policyPath := flags.String("snapshot-policy", "", "independently accepted snapshot policy file")
 	checkpointPath := flags.String("checkpoint", "", "previous checkpoint file, with its latest digest pinned in policy")
+	stream := flags.Bool("bundle-stdin", false, "verify one framed policy/context/checkpoint and witness from standard input")
 	bounds := stateaudit.BindingLimits{}
 	flags.Uint64Var(&bounds.MaxDocumentBytes, "max-context-bytes", 8<<20, "maximum bytes per snapshot context file")
 	flags.Uint64Var(&bounds.MaxHeaders, "max-headers", 256, "maximum linked headers in a snapshot")
@@ -35,6 +36,22 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags.Uint64Var(&limits.MaxSteps, "max-steps", 1000000, "maximum verification traversal steps")
 	if err := flags.Parse(args); err != nil {
 		return 2
+	}
+	if *stream {
+		if *root != "" || *snapshotPath != "" || *policyPath != "" || *checkpointPath != "" || (*input != "" && *input != "-") || flags.NArg() != 0 {
+			fmt.Fprintln(stderr, "framed input cannot be combined with file or root overrides")
+			return 2
+		}
+		result, err := stateaudit.VerifyInput(context.Background(), stdin, time.Now().Unix(), limits, bounds)
+		if err != nil {
+			fmt.Fprintln(stderr, "framed snapshot verification rejected")
+			return 1
+		}
+		if json.NewEncoder(stdout).Encode(result) != nil {
+			fmt.Fprintln(stderr, "summary output incomplete")
+			return 1
+		}
+		return 0
 	}
 	bound := *snapshotPath != "" || *policyPath != "" || *checkpointPath != ""
 	var inputs bindingInputs

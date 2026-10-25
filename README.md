@@ -62,3 +62,9 @@ artifact directory against an independent byte-selection policy. See the
 [artifact verification guide](release/artifacts/README.md) for its optional
 provenance mode, which adds a pinned local verifier/root and exact source/workflow
 policy. SBOM content, build reproduction and release acceptance remain unverified.
+
+The standalone `go build ./cmd/zvm-sbom` command produces or checks a selected
+SPDX 2.3 Go build inventory against independent artifact/source/module inputs.
+See the [Go SBOM profile](release/artifacts/SBOM.md) for its exact checksum,
+replacement, metadata and coverage boundaries. Full runtime/license coverage,
+source authority and release acceptance remain unqualified.

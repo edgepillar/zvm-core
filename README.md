@@ -68,3 +68,13 @@ SPDX 2.3 Go build inventory against independent artifact/source/module inputs.
 See the [Go SBOM profile](release/artifacts/SBOM.md) for its exact checksum,
 replacement, metadata and coverage boundaries. Full runtime/license coverage,
 source authority and release acceptance remain unqualified.
+
+The artifact checker can combine the selected Go SBOM controls and the optional
+signature verifier inside one observed file inventory. See the
+[contents composition guide](release/artifacts/CONTENTS.md) for independent
+control pins, exact source/qualification/platform bindings and result scope.
+
+The standalone `go build ./cmd/zvm-artifact-pack` command streams a deterministic
+selected-file ZIP and verifies independently pinned packages without extraction.
+See the [archive profile](release/artifacts/ARCHIVE.md) for fixed metadata,
+explicit inventory, failure retention and distribution/acceptance boundaries.

@@ -91,3 +91,27 @@ func TestProvenanceFailureReturnsNoSuccessReceipt(t *testing.T) {
 		t.Fatal("failed provenance verification produced a success receipt")
 	}
 }
+
+func TestContentsOptionsAndFailureDoNotProduceSuccess(t *testing.T) {
+	base, err := filepath.Abs("../../release/artifacts/testdata/synthetic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	common := []string{"-manifest", filepath.Join(base, "manifest.json"), "-policy", filepath.Join(base, "policy.json"), "-directory", filepath.Join(base, "payloads")}
+	for _, option := range []string{"-contents-policy", "-content-inputs"} {
+		var out, errout bytes.Buffer
+		err := run(append(append([]string{}, common...), option, "/private/not-for-output"), &out, &errout)
+		if err == nil || out.Len() != 0 || strings.Contains(err.Error(), "not-for-output") {
+			t.Fatal("partial contents options produced output or disclosed input path")
+		}
+	}
+	invalid := filepath.Join(t.TempDir(), "contents.json")
+	if err := os.WriteFile(invalid, []byte("{}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errout bytes.Buffer
+	err = run(append(append([]string{}, common...), "-contents-policy", invalid, "-content-inputs", t.TempDir()), &out, &errout)
+	if err == nil || out.Len() != 0 {
+		t.Fatal("failed content verification produced a success receipt")
+	}
+}

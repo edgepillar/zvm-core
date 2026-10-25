@@ -101,9 +101,11 @@ A successful receipt reports `spdxProfileVerified`, `subjectBytesVerified`,
 `goBuildInfoMatched` and `lockedModulesMatched`. `sourceCommitAuthenticated`,
 `toolchainIdentityAuthenticated`, `completeRuntimeInventoryEstablished`,
 `licenseCoverageEstablished` and `releaseAccepted` remain false. The existing
-artifact-selection result's `sbomContentsVerified` is unchanged: completing the
-selected release's content/coverage policy and integrating sidecars are separate
-work. A valid profile or schema is not a production acceptance decision.
+default artifact-selection result's `sbomContentsVerified` is unchanged. Optional
+[contents composition](CONTENTS.md) verifies every explicitly selected Go profile
+and cross-policy binding inside the closed file observation; that scoped mode
+can report content verification while retaining false runtime/license/release
+acceptance. A valid profile or schema is not a production acceptance decision.
 
 ## Qualification
 

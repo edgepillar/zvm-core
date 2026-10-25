@@ -23,8 +23,10 @@ func run(args []string, stdout, stderr io.Writer) error {
 	verifier := flags.String("verifier", "", "Absolute independently pinned GitHub CLI executable")
 	trustedRoot := flags.String("trusted-root", "", "Independently pinned local trusted-root JSONL")
 	temporary := flags.String("temporary-directory", "", "Explicit owned directory for bounded verifier scratch")
+	contentsPolicy := flags.String("contents-policy", "", "Independent complete SBOM-profile/control-file policy JSON")
+	controls := flags.String("content-inputs", "", "Dedicated exact SBOM control-file directory")
 	flags.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zvm-artifact-check -manifest FILE -policy FILE -directory DIR\nSignatures require all of: -provenance-policy FILE -verifier FILE -trusted-root FILE -temporary-directory DIR\nByte selection alone verifies no signatures. SBOM contents, build reproduction and release acceptance remain unverified.")
+		fmt.Fprintln(stderr, "Usage: zvm-artifact-check -manifest FILE -policy FILE -directory DIR\nSignatures require all of: -provenance-policy FILE -verifier FILE -trusted-root FILE -temporary-directory DIR\nSelected Go SBOM profiles require both: -contents-policy FILE -content-inputs DIR\nCombined mode verifies both inside the same file observation. Complete runtime/license coverage, build reproduction and release acceptance remain unverified.")
 	}
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -53,14 +55,30 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if provided != 0 && provided != 4 {
 		return errors.New("all four provenance options are required together")
 	}
+	if (*contentsPolicy == "") != (*controls == "") {
+		return errors.New("contents policy and explicit content inputs are required together")
+	}
+	var contents []byte
+	if *contentsPolicy != "" {
+		contents, err = artifacts.ReadDocument(*contentsPolicy)
+		if err != nil {
+			return fmt.Errorf("contents policy: %w", err)
+		}
+	}
 	var result any
 	if provided == 4 {
 		v, readErr := artifacts.ReadDocument(*provenancePolicy)
 		if readErr != nil {
 			return fmt.Errorf("provenance policy: %w", readErr)
 		}
-		result, err = artifacts.CheckProvenance(context.Background(), m, p, v, *directory, artifacts.ProvenanceOptions{
-			VerifierPath: *verifier, TrustedRootPath: *trustedRoot, TemporaryDirectory: *temporary})
+		options := artifacts.ProvenanceOptions{VerifierPath: *verifier, TrustedRootPath: *trustedRoot, TemporaryDirectory: *temporary}
+		if contents != nil {
+			result, err = artifacts.CheckBundle(context.Background(), m, p, v, contents, *directory, *controls, options)
+		} else {
+			result, err = artifacts.CheckProvenance(context.Background(), m, p, v, *directory, options)
+		}
+	} else if contents != nil {
+		result, err = artifacts.CheckContents(m, p, contents, *directory, *controls)
 	} else {
 		result, err = artifacts.Check(m, p, *directory)
 	}

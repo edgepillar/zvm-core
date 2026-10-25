@@ -216,6 +216,10 @@ func CheckProvenance(ctx context.Context, manifestBytes, policyBytes, provenance
 type verifierRunner func(context.Context, string, string, []string) ([]byte, error)
 
 func checkProvenance(ctx context.Context, manifestBytes, policyBytes, provenancePolicyBytes []byte, root string, options ProvenanceOptions, run verifierRunner) (ProvenanceResult, error) {
+	return checkProvenanceObserved(ctx, manifestBytes, policyBytes, provenancePolicyBytes, root, options, run, nil, nil)
+}
+
+func checkProvenanceObserved(ctx context.Context, manifestBytes, policyBytes, provenancePolicyBytes []byte, root string, options ProvenanceOptions, run verifierRunner, additional selectionVerifier, finish func() error) (ProvenanceResult, error) {
 	if ctx == nil || ctx.Err() != nil {
 		return ProvenanceResult{}, errors.New("verification context is unavailable")
 	}
@@ -270,6 +274,11 @@ func checkProvenance(ctx context.Context, manifestBytes, policyBytes, provenance
 	}
 	count := 0
 	result, err := checkSelected(manifestBytes, policyBytes, root, nil, func(d *directory, files map[string]File, before map[string]os.FileInfo) error {
+		if additional != nil {
+			if err := additional(d, files, before); err != nil {
+				return err
+			}
+		}
 		for i, artifact := range p.Artifacts {
 			if ctx.Err() != nil {
 				return errors.New("verification was canceled")
@@ -311,7 +320,13 @@ func checkProvenance(ctx context.Context, manifestBytes, policyBytes, provenance
 		if err := parent.checkAncestors(); err != nil {
 			return err
 		}
-		return tool.unchanged()
+		if err := tool.unchanged(); err != nil {
+			return err
+		}
+		if finish != nil {
+			return finish()
+		}
+		return nil
 	})
 	if err != nil {
 		return ProvenanceResult{}, err

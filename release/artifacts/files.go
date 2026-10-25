@@ -234,20 +234,8 @@ func checkSelected(manifestBytes, policyBytes []byte, root string, afterOpen fun
 	if err != nil {
 		return Result{}, err
 	}
-	// SHA256SUMS lists every payload/sidecar/notes file except itself, in sorted
-	// path order. The manifest binds the checksums file without a self-hash cycle.
-	if files[m.ChecksumsPath].Bytes > MaxDocumentBytes {
-		return Result{}, errors.New("checksums text exceeds its byte limit")
-	}
-	var expected strings.Builder
-	for _, pin := range m.Files {
-		if pin.Path != m.ChecksumsPath {
-			expected.WriteString(pin.SHA256 + "  " + pin.Path + "\n")
-		}
-	}
-	checksum := files[m.ChecksumsPath]
-	if int64(expected.Len()) != checksum.Bytes || sum([]byte(expected.String())) != checksum.SHA256 {
-		return Result{}, errors.New("checksums text does not exactly describe the selected files")
+	if err := validateChecksums(m, files); err != nil {
+		return Result{}, err
 	}
 	d, err := openDirectory(root)
 	if err != nil {
@@ -287,6 +275,25 @@ func checkSelected(manifestBytes, policyBytes []byte, root string, afterOpen fun
 	}
 	canonical, _ := CanonicalPolicy(p)
 	return Result{ManifestSHA256: sum(manifestBytes), PolicySHA256: sum(canonical), FilesVerified: len(files), BytesVerified: total, SelectionVerified: true}, nil
+}
+
+// SHA256SUMS lists every selected file except itself in sorted path order;
+// the manifest pins the checksums file without a self-hash cycle.
+func validateChecksums(m Manifest, files map[string]File) error {
+	if files[m.ChecksumsPath].Bytes > MaxDocumentBytes {
+		return errors.New("checksums text exceeds its byte limit")
+	}
+	var expected strings.Builder
+	for _, pin := range m.Files {
+		if pin.Path != m.ChecksumsPath {
+			expected.WriteString(pin.SHA256 + "  " + pin.Path + "\n")
+		}
+	}
+	checksum := files[m.ChecksumsPath]
+	if int64(expected.Len()) != checksum.Bytes || sum([]byte(expected.String())) != checksum.SHA256 {
+		return errors.New("checksums text does not exactly describe the selected files")
+	}
+	return nil
 }
 
 // ExpectedPaths is useful for producers preparing a dedicated selected-file

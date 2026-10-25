@@ -85,3 +85,7 @@ object bindings without running Git, fetching modules or exporting machine paths
 Explicit contents schema 2 composes it with selected files and optional signatures,
 retaining source observations through final verification. Default release selection
 and release acceptance retain their existing scope.
+
+The [service source cohort](release/artifacts/SERVICE-OUTPUTS.md) records current
+Node, Relayer and Bridge source/package expectations for later artifact checks,
+with native-platform, Docker and release qualification boundaries kept explicit.

@@ -1,0 +1,49 @@
+name: Native state witness
+
+on:
+  push:
+    paths:
+      - 'stateaudit/**'
+      - 'cmd/zvm-state-sum/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/native-state-witness.yml'
+  pull_request:
+    paths:
+      - 'stateaudit/**'
+      - 'cmd/zvm-state-sum/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/native-state-witness.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  witness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [normal, race]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Build and exercise the standalone command
+        shell: bash
+        env:
+          MODE: ${{ matrix.mode }}
+        run: |
+          race_args=()
+          if [[ "$MODE" == race ]]; then race_args=(-race); fi
+          go build "${race_args[@]}" -o "$RUNNER_TEMP/zvm-state-sum" ./cmd/zvm-state-sum
+          ZVM_STATE_SUM_BINARY="$RUNNER_TEMP/zvm-state-sum" go test "${race_args[@]}" -count=1 -timeout=180s ./stateaudit ./cmd/zvm-state-sum
+      - name: Static analysis
+        if: matrix.mode == 'normal'
+        run: go vet ./stateaudit ./cmd/zvm-state-sum

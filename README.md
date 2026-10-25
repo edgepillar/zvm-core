@@ -89,3 +89,8 @@ and release acceptance retain their existing scope.
 The [service source cohort](release/artifacts/SERVICE-OUTPUTS.md) records current
 Node, Relayer and Bridge source/package expectations for later artifact checks,
 with native-platform, Docker and release qualification boundaries kept explicit.
+
+The standalone `go build ./cmd/zvm-source-check` command checks complete parent
+source exports, declared Gitlink entries and selected raw commit controls against
+an independent policy SHA-256. See the [source tree preflight](release/artifacts/SOURCE-TREES.md)
+for separate child-tree, compiler-use, artifact-composition and authority limits.

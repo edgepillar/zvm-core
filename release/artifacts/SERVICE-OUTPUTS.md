@@ -27,6 +27,11 @@ allow the same inputs to be reused without duplicating entire dependency trees.
 Raw Git author/message data and physical runtime directories are excluded from
 the public snapshot.
 
+The [standalone source tree preflight](SOURCE-TREES.md) can check a complete parent
+export and its selected Gitlink entries against a separately pinned source policy.
+Check each child tree separately when child content is needed. A source-only
+receipt does not establish compiler use or upgrade an artifact/SBOM receipt.
+
 ## Actual package observations
 
 The recorded source graphs used Go 1.25.14 with `GOOS=darwin`, `GOARCH=arm64`,

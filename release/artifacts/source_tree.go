@@ -160,6 +160,13 @@ func (s *observedSource) unchanged() error {
 // inspectLocalSource verifies SHA-256 pins and Git blob/tree identity in one
 // streaming observation. Git metadata, subprocesses and network are never used.
 func inspectLocalSource(source GoLocalSource, root string, commitBytes []byte) (*observedSource, int64, error) {
+	if len(source.Source.Gitlinks) != 0 {
+		return nil, 0, errors.New("local replacement inspection requires a flat source tree")
+	}
+	return inspectSourceTree(source, root, commitBytes)
+}
+
+func inspectSourceTree(source GoLocalSource, root string, commitBytes []byte) (*observedSource, int64, error) {
 	files, total, err := sourceFilePins(source)
 	if err != nil {
 		return nil, 0, err
@@ -183,6 +190,15 @@ func inspectLocalSource(source GoLocalSource, root string, commitBytes []byte) (
 		return nil, 0, err
 	}
 	tree := &gitNode{children: map[string]*gitNode{}}
+	for _, link := range source.Source.Gitlinks {
+		oid, err := hex.DecodeString(link.Commit)
+		if err != nil || len(link.Commit) != len(source.Source.Tree) {
+			return nil, 0, errors.New("source Gitlink object format does not match its parent")
+		}
+		if err := tree.add(link.Path, "160000", oid); err != nil {
+			return nil, 0, err
+		}
+	}
 	for _, pin := range source.Files {
 		before := snapshot.before[pin.Path]
 		if before.Size() != pin.Bytes || (before.Mode().Perm()&0111 != 0) != (pin.Mode == "100755") {

@@ -313,3 +313,60 @@ These are local raw-value/identity checks. Full supported-client and artifact
 provenance acceptance, real code/layout/upgrade authority, independently accepted
 NoM vault/frontier/reserve binding and economic liability/exclusion policy remain
 separate adoption gates. The native total-backing claim stays not_established.
+
+
+## NoM reserve boundary at the reviewed source
+
+This section reviews Core `0e897c1dc5117beafbe59a960b0a49c2c44be2c2` and the Bridge observation provider
+`edb38e664c5b6436d4bfd8f1eb5b9d2b635ad6e1`. It describes the selected ZVM data flow; it makes no claim about
+all other NoM implementations or network activation.
+
+| Source-bound fact | Evidence and limit |
+| --- | --- |
+| The L2 height maps to a configured NoM momentum height. | [`MomentumForL2Block`](https://github.com/Zenoglyphs-VM/zvm-core/blob/0e897c1dc5117beafbe59a960b0a49c2c44be2c2/rollup/params.go#L371) is a configuration mapping; a height alone does not authenticate a NoM branch. |
+| Derivation carries a momentum height, hash and timestamp into L1 attributes. | [`L1InfoData`](https://github.com/Zenoglyphs-VM/zvm-core/blob/0e897c1dc5117beafbe59a960b0a49c2c44be2c2/l2/deposit.go#L43) encodes the supplied momentum; [`Attributes`](https://github.com/Zenoglyphs-VM/zvm-core/blob/0e897c1dc5117beafbe59a960b0a49c2c44be2c2/derive/plan.go#L1176) also supplies its hash as randomness/beacon-root input. An accepted L2 header commits the resulting values without independently proving a NoM balance. |
+| The vault reader checks a confirmed account frontier and a stable reader sample. | [`observationFrontier` and `observePeg`](https://github.com/Zenoglyphs-VM/zvm-bridge/blob/edb38e664c5b6436d4bfd8f1eb5b9d2b635ad6e1/bridge/observations.go#L263) check configured identity, reported confirmation, account height, empty queues and rechecks. These checks remain reader observations. |
+| The balance interface carries address, account height and token amounts. | [`AccountInfo`](https://github.com/Zenoglyphs-VM/zvm-core/blob/0e897c1dc5117beafbe59a960b0a49c2c44be2c2/znn/client.go#L156) and the provider carry no authenticated state/value proof. An omitted token entry is a reader zero convention, not a proved absent state key. |
+| Confirmation details are RPC decorations in the inspected account-block model. | [`AccountBlock` and `ComputeHash`](https://github.com/Zenoglyphs-VM/zvm-core/blob/0e897c1dc5117beafbe59a960b0a49c2c44be2c2/znn/block.go#L81) do not turn those decorations or `ChangesHash` into an adopted typed reserve commitment. A separate verified protocol rule is required. |
+
+The local complete account witness and code/storage proofs authenticate L2
+measurements under the caller's accepted L2 point. Attaching an unsigned NoM
+balance declaration cannot extend that proof to the vault. The current native
+`totalBackingState` therefore remains `not_established`; missing reserve
+proof is unavailable, never a zero reserve or a zero deficit. Preserve the
+existing pending-liquidity observation as its separately labelled reader sample.
+
+A future reserve consumer needs an independently accepted NoM chain/genesis and
+version/profile, canonical momentum hash and height, plus authenticated vault
+address/token/value at that exact retained state point. This may be an accepted
+state/value proof or a complete independently validated snapshot/replay under
+an explicit supported profile. Account-block content/signature/linkage evidence
+must not be relabelled as a balance proof. Derive keys locally from the accepted
+profile, rather than accepting an arbitrary key or root from the producer.
+
+The join must bind that NoM point to the momentum declared by the accepted L2
+derivation and retain the exact vault account frontier and confirmation anchor.
+Do not substitute height equality, a fresh collection time or agreement among
+unqualified readers for the accepted authority. Reorgs, missing history, epoch
+changes, rollback, lost checkpoints and an ahead-of-derivation vault point
+require explicit verified reconciliation. Keep original account/payout hashes;
+this consumer must never sign, settle, replace, broadcast or reset history.
+
+Before adoption, exercise wrong address/token/key/root, wrong same-height hash,
+stored zero versus absent key, missing/partial proof, stale source, changed
+frontier, restored old checkpoint, cancellation and resource bounds. These NoM
+reserve cases are acceptance requirements, not tests executed by this review.
+Code/layout/upgrade authority, exact wei/base-unit conversion and ceiling
+reserves, retained fees, pending/paid payouts, burn mirroring and sink exclusions
+still require their separately accepted economic contract.
+
+Measurement output omits selector inventories, but arbitrary raw storage values
+or meaningful labels can themselves identify accounts. Review every selected
+counter and exported aggregate before publication; omission of selector addresses
+is not anonymization of arbitrary contract storage.
+
+The NoM review executes no client, VM, signing, chain RPC, wallet or recipient
+operation. The existing L2 implementation tests are retained only when every
+executable, test, fixture, dependency and workflow file is unchanged. A new
+source-only note is not new native execution, NoM proof qualification, independent
+economic acceptance or production readiness.

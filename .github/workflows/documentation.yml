@@ -1,0 +1,32 @@
+name: Documentation evidence
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-documents:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Install pinned parser packages without lifecycle scripts
+        run: npm ci --prefix tools/doc-check --ignore-scripts --no-audit --no-fund
+      - name: Test the documentation and evidence checker
+        run: npm test --prefix tools/doc-check
+      - name: Acquire the selected immutable public specification
+        run: >-
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2
+          --max-time 60 --max-filesize 524288
+          https://raw.githubusercontent.com/Zenoglyphs-VM/zvm-docs/35c5be8a59059a9e1f3aab40c980ef6cd18cf0be/spec/SPEC.md
+          --output "$RUNNER_TEMP/g02-spec.md"
+      - name: Check offline references and evidence records
+        run: node tools/doc-check/cli.mjs --input "published-spec=$RUNNER_TEMP/g02-spec.md"

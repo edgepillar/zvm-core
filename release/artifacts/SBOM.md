@@ -60,8 +60,14 @@ of the selected bytes, not authentication of an honest compiler or source tree.
 
 Documents/lock inputs are at most 1 MiB. There are at most 254 expected modules
 and 32 build settings. Subject bytes are streamed through SHA-256 before the
-standard-library build-info reader is used. Metadata reads have a 1 MiB per-read
-and 16 MiB cumulative budget. Rooted no-follow regular-file opens and observed
+build metadata is decoded. Metadata reads retain a 1 MiB per-read
+and 16 MiB cumulative budget. Thin little-endian Mach-O executables for amd64
+and arm64 use a bounded explicit `__go_buildinfo` section reader for Go 1.18+
+inline metadata. Load commands/section spans, unique section selection, framing
+and CPU/settings agreement are checked before reading at most 1 MiB of metadata.
+Unrelated symbol/string/relocation tables are never loaded. Other executable
+formats retain the bounded standard-library reader. This is build-inventory
+parsing, not complete executable-format or OS-loader validation. Rooted no-follow regular-file opens and observed
 identity/size/mode/time/link checks preserve the existing filesystem scope. Native
 file operations support Linux and macOS; reading a platform label does not qualify
 execution on that platform. The caller must trust the local host and prevent
@@ -130,3 +136,11 @@ schema-engine execution.
 Original D02 still needs other Go/local-source profiles, Node/web and container
 inventories, supported platform packages, actual signed project sidecars,
 independent distribution/reproduction and owner/operator release acceptance.
+
+The additional opt-in `ZVM_CORE_CLI_FIXTURE_DIRECTORY` uses the same four-file
+input layout for an independently qualified real `cmd/zvm` subject. It exercises
+the actual source-side transitive module inventory and versioned op-geth
+replacement, rather than assuming a one-module tool fixture. This control reads
+the subject without execution; fixture provisioning retains its original source,
+build and qualification receipts. It does not relabel an older retained build as
+a newly compiled current-head output.

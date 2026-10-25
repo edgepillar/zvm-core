@@ -2,7 +2,6 @@ package artifacts
 
 import (
 	"crypto/sha256"
-	"debug/buildinfo"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -221,7 +220,7 @@ func readGoSubject(name string, pin File) (*debug.BuildInfo, error) {
 	if err != nil || n != pin.Bytes || hex.EncodeToString(h.Sum(nil)) != pin.SHA256 {
 		return nil, errors.New("Go subject SHA-256 does not match independent policy")
 	}
-	info, readErr := buildinfo.Read(&metadataReader{reader: f, size: pin.Bytes, remaining: 16 << 20})
+	info, readErr := readBuildInfo(&metadataReader{reader: f, size: pin.Bytes, remaining: 16 << 20})
 	after, statErr := f.Stat()
 	named, pathErr := d.root.Lstat(base)
 	if readErr != nil || statErr != nil || pathErr != nil || !stable(before, after) || !stable(before, named) {

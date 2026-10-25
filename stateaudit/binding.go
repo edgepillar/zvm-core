@@ -226,6 +226,10 @@ func decodeSnapshotHeader(raw []byte, limit uint64) (*types.Header, error) {
 // links prove continuity with that checkpoint, not independent canonicality.
 // It never changes inputs, writes a checkpoint, selects trust or resets history.
 func VerifySnapshot(ctx context.Context, policy SnapshotPolicy, snapshot Snapshot, witness Witness, previous *Checkpoint, now int64, limits Limits, bounds BindingLimits) (BoundSummary, error) {
+	return verifySnapshot(ctx, policy, snapshot, witness, previous, now, limits, bounds, nil)
+}
+
+func verifySnapshot(ctx context.Context, policy SnapshotPolicy, snapshot Snapshot, witness Witness, previous *Checkpoint, now int64, limits Limits, bounds BindingLimits, observe func([]byte, *big.Int) error) (BoundSummary, error) {
 	if err := check(ctx, limits); err != nil {
 		return BoundSummary{}, err
 	}
@@ -276,7 +280,7 @@ func VerifySnapshot(ctx context.Context, policy SnapshotPolicy, snapshot Snapsho
 	if last.Number.Uint64() != policy.BlockNumber || last.Hash().Hex() != policy.BlockHash || last.Time > uint64(now) || uint64(now)-last.Time > policy.MaxHeaderAgeSeconds || (policy.BlockNumber == 0 && policy.BlockHash != policy.Expected.GenesisHash) {
 		return BoundSummary{}, errors.New("snapshot does not match the accepted fresh block")
 	}
-	summary, err := Verify(ctx, last.Root, witness, limits)
+	summary, err := verifyAccounts(ctx, last.Root, witness, limits, observe)
 	if err != nil {
 		return BoundSummary{}, err
 	}

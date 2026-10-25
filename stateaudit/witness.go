@@ -162,6 +162,10 @@ func wireSize(ctx context.Context, witness Witness, limits Limits) (uint64, erro
 // merely from this witness. A successful result includes every account balance,
 // including bridge locks, sinks and fee claims; it performs no exclusions.
 func Verify(ctx context.Context, expectedRoot common.Hash, witness Witness, limits Limits) (Summary, error) {
+	return verifyAccounts(ctx, expectedRoot, witness, limits, nil)
+}
+
+func verifyAccounts(ctx context.Context, expectedRoot common.Hash, witness Witness, limits Limits, observe func([]byte, *big.Int) error) (Summary, error) {
 	size, err := wireSize(ctx, witness, limits)
 	if err != nil {
 		return Summary{}, err
@@ -219,7 +223,13 @@ func Verify(ctx context.Context, expectedRoot common.Hash, witness Witness, limi
 		if err != nil || !bytes.Equal(canonical, it.LeafBlob()) {
 			return Summary{}, errors.New("noncanonical state account")
 		}
-		total.Add(total, account.Balance.ToBig())
+		balance := account.Balance.ToBig()
+		if observe != nil {
+			if err := observe(it.LeafKey(), balance); err != nil {
+				return Summary{}, err
+			}
+		}
+		total.Add(total, balance)
 		accounts++
 	}
 	if it.Error() != nil {

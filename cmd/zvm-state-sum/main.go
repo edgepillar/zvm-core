@@ -24,6 +24,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	snapshotPath := flags.String("snapshot", "", "bound snapshot context file")
 	policyPath := flags.String("snapshot-policy", "", "independently accepted snapshot policy file")
 	checkpointPath := flags.String("checkpoint", "", "previous checkpoint file, with its latest digest pinned in policy")
+	partitionPath := flags.String("partition-policy", "", "independently provisioned disjoint address-group policy")
+	partitionPin := flags.String("partition-policy-sha256", "", "independently accepted partition policy digest")
+	partitionLimits := stateaudit.PartitionLimits{}
+	flags.Uint64Var(&partitionLimits.MaxGroups, "max-partition-groups", 64, "maximum measured address groups, at most 64")
+	flags.Uint64Var(&partitionLimits.MaxAddresses, "max-partition-addresses", 4096, "maximum selected addresses, at most 4096")
 	stream := flags.Bool("bundle-stdin", false, "verify one framed policy/context/checkpoint and witness from standard input")
 	bounds := stateaudit.BindingLimits{}
 	flags.Uint64Var(&bounds.MaxDocumentBytes, "max-context-bytes", 8<<20, "maximum bytes per snapshot context file")
@@ -37,12 +42,41 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
+	var partition *stateaudit.PartitionPolicy
+	if (*partitionPath == "") != (*partitionPin == "") {
+		fmt.Fprintln(stderr, "partition policy and independent digest pin are both required")
+		return 2
+	}
+	if *partitionPath != "" {
+		raw, err := bindingFile(*partitionPath, bounds.MaxDocumentBytes)
+		if err != nil {
+			fmt.Fprintln(stderr, "partition policy input rejected")
+			return 1
+		}
+		decoded, err := stateaudit.DecodePartitionPolicy(raw, bounds.MaxDocumentBytes, partitionLimits)
+		if err != nil {
+			fmt.Fprintln(stderr, "partition policy fields rejected")
+			return 1
+		}
+		pin, err := decoded.Fingerprint(partitionLimits)
+		if err != nil || pin != *partitionPin {
+			fmt.Fprintln(stderr, "partition policy digest rejected")
+			return 1
+		}
+		partition = &decoded
+	}
 	if *stream {
 		if *root != "" || *snapshotPath != "" || *policyPath != "" || *checkpointPath != "" || (*input != "" && *input != "-") || flags.NArg() != 0 {
-			fmt.Fprintln(stderr, "framed input cannot be combined with file or root overrides")
+			fmt.Fprintln(stderr, "framed input cannot be combined with snapshot file or root overrides")
 			return 2
 		}
-		result, err := stateaudit.VerifyInput(context.Background(), stdin, time.Now().Unix(), limits, bounds)
+		var result any
+		var err error
+		if partition != nil {
+			result, err = stateaudit.VerifyInputPartition(context.Background(), stdin, *partitionPin, *partition, time.Now().Unix(), limits, bounds, partitionLimits)
+		} else {
+			result, err = stateaudit.VerifyInput(context.Background(), stdin, time.Now().Unix(), limits, bounds)
+		}
 		if err != nil {
 			fmt.Fprintln(stderr, "framed snapshot verification rejected")
 			return 1
@@ -99,7 +133,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	var output any
-	if bound {
+	if partition != nil {
+		if bound {
+			output, err = stateaudit.VerifySnapshotPartition(context.Background(), inputs.policy, inputs.snapshot, *partitionPin, *partition, witness, inputs.checkpoint, time.Now().Unix(), limits, bounds, partitionLimits)
+		} else {
+			output, err = stateaudit.VerifyPartition(context.Background(), common.BytesToHash(rawRoot), *partitionPin, *partition, witness, limits, partitionLimits)
+		}
+	} else if bound {
 		output, err = stateaudit.VerifySnapshot(context.Background(), inputs.policy, inputs.snapshot, witness, inputs.checkpoint, time.Now().Unix(), limits, bounds)
 	} else {
 		output, err = stateaudit.Verify(context.Background(), common.BytesToHash(rawRoot), witness, limits)

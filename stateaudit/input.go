@@ -53,54 +53,69 @@ func EncodeInput(ctx context.Context, writer io.Writer, policy SnapshotPolicy, s
 // version-1 witness stream. Accepted policy and previous-record authority must
 // come from the caller; the frame supplies no trust keys or network source.
 func VerifyInput(ctx context.Context, reader io.Reader, now int64, limits Limits, bounds BindingLimits) (BoundSummary, error) {
-	if err := check(ctx, limits); err != nil {
+	input, err := decodeInput(ctx, reader, limits, bounds)
+	if err != nil {
 		return BoundSummary{}, err
 	}
+	return VerifySnapshot(ctx, input.policy, input.snapshot, input.witness, input.checkpoint, now, limits, bounds)
+}
+
+type framedInput struct {
+	policy     SnapshotPolicy
+	snapshot   Snapshot
+	checkpoint *Checkpoint
+	witness    Witness
+}
+
+func decodeInput(ctx context.Context, reader io.Reader, limits Limits, bounds BindingLimits) (framedInput, error) {
+	if err := check(ctx, limits); err != nil {
+		return framedInput{}, err
+	}
 	if reader == nil || bounds.MaxDocumentBytes == 0 || bounds.MaxDocumentBytes > math.MaxUint32 {
-		return BoundSummary{}, errors.New("snapshot input reader or context bound unavailable")
+		return framedInput{}, errors.New("snapshot input reader or context bound unavailable")
 	}
 	var header [12]byte
 	if _, err := io.ReadFull(reader, header[:]); err != nil || !bytes.Equal(header[:8], inputMagic[:]) {
-		return BoundSummary{}, errors.New("snapshot input frame unavailable")
+		return framedInput{}, errors.New("snapshot input frame unavailable")
 	}
 	n := binary.BigEndian.Uint32(header[8:])
 	if n == 0 || uint64(n) > bounds.MaxDocumentBytes {
-		return BoundSummary{}, errors.New("snapshot input context size limit")
+		return framedInput{}, errors.New("snapshot input context size limit")
 	}
 	if err := ctx.Err(); err != nil {
-		return BoundSummary{}, err
+		return framedInput{}, err
 	}
 	raw := make([]byte, int(n))
 	if _, err := io.ReadFull(reader, raw); err != nil {
-		return BoundSummary{}, errors.New("snapshot input context incomplete")
+		return framedInput{}, errors.New("snapshot input context incomplete")
 	}
 	fields, err := contextObject(raw, bounds.MaxDocumentBytes)
 	if err != nil || len(fields) != 4 || requiredContextFields(fields, "schema", "policy", "snapshot") != nil || fields["checkpoint"] == nil {
-		return BoundSummary{}, errors.New("snapshot input fields must match the exact schema")
+		return framedInput{}, errors.New("snapshot input fields must match the exact schema")
 	}
 	var schema int
 	if json.Unmarshal(fields["schema"], &schema) != nil || schema != 1 {
-		return BoundSummary{}, errors.New("snapshot input schema unavailable")
+		return framedInput{}, errors.New("snapshot input schema unavailable")
 	}
 	policy, err := DecodeSnapshotPolicy(fields["policy"], bounds.MaxDocumentBytes)
 	if err != nil {
-		return BoundSummary{}, err
+		return framedInput{}, err
 	}
 	snapshot, err := DecodeSnapshot(fields["snapshot"], bounds.MaxDocumentBytes)
 	if err != nil {
-		return BoundSummary{}, err
+		return framedInput{}, err
 	}
 	var previous *Checkpoint
 	if !bytes.Equal(bytes.TrimSpace(fields["checkpoint"]), []byte("null")) {
 		checkpoint, err := DecodeCheckpoint(fields["checkpoint"], bounds.MaxDocumentBytes)
 		if err != nil {
-			return BoundSummary{}, err
+			return framedInput{}, err
 		}
 		previous = &checkpoint
 	}
 	witness, err := Decode(ctx, reader, limits)
 	if err != nil {
-		return BoundSummary{}, err
+		return framedInput{}, err
 	}
-	return VerifySnapshot(ctx, policy, snapshot, witness, previous, now, limits, bounds)
+	return framedInput{policy: policy, snapshot: snapshot, checkpoint: previous, witness: witness}, nil
 }

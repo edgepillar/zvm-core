@@ -176,3 +176,54 @@ binary witness follows immediately and must end at EOF. The same context and
 witness limits apply. `EncodeInput` streams this format; `VerifyInput` validates
 it through the existing complete snapshot verifier. A frame supplies inputs,
 not independent authority, and a refused stream emits no successful record.
+
+## Disjoint balance measurements
+
+An optional independently provisioned partition policy measures selected address
+groups and the exact remainder while verifying the entire account trie. It
+supplies no default bridge, fee, sink or exclusion membership. A group name is a
+measurement label; it establishes no contract code/storage, withdrawal lock,
+burn authority, economic exclusion or circulating liability.
+
+The exact policy schema is `schema: 1` and `groups`, an array of objects with
+required `id` and `addresses`. IDs match `[a-z][a-z0-9-]{0,31}` and are strictly
+sorted. Every group has at least one address. Addresses are exact lowercase
+`0x` plus forty hexadecimal digits, strictly sorted within a group and disjoint
+across all groups. The zero address is a valid measurement target. Policy and
+resource bounds are explicit: at most 64 groups and 4096 selected addresses.
+Unknown, aliased, duplicate, missing and null JSON fields are rejected.
+
+`PartitionPolicy.Fingerprint` is SHA-256 of `ZVM native balance partition v1\n`
+followed by canonical typed JSON, with no trailing newline. Its accepted digest
+must be independently provisioned by the caller, separately from snapshot input.
+The digest binds the address selection; it neither approves the selection nor
+conceals a predictable address inventory. Keep inventories and meaningful private
+labels outside public status output.
+
+`VerifyPartition`, `VerifySnapshotPartition` and `VerifyInputPartition` return
+the complete aggregate, pinned group digest, aggregate balance and selected/
+present account counts for each group, plus remainder balance/account count.
+No individual addresses are output. Groups and remainder exactly conserve the
+full account total, including amounts above uint256. A zero-balance account
+retained by nonce is present; an absent selected address is counted separately.
+Absence becomes a proved zero only after complete state verification succeeds.
+Missing selected or unselected trie nodes cannot become a successful sample.
+Failure returns no partial group measurements or checkpoint.
+
+The original verifier and partition verifier share the same complete traversal;
+there is no extra state scan per address or group. Lookups and accumulators are
+bounded by the explicit partition limits. The witness, framed-input and
+checkpoint formats remain unchanged. Context-bound measurements retain the
+existing accepted header, release, epoch, freshness and checkpoint checks.
+Retain both the latest checkpoint pin and partition-policy pin externally.
+
+The command accepts `-partition-policy accepted-groups.json` together with
+`-partition-policy-sha256 <independently-accepted-digest>` in raw-root, bound-file
+and `-bundle-stdin` modes. Both flags are required together. In framed mode the
+group policy remains outside the producer's frame; that frame cannot select a
+different group policy. `-max-partition-groups` and `-max-partition-addresses`
+can lower the measurement bounds. Success prints aggregate group measurements;
+it does not subtract any group from liability, add pending withdrawals or
+declare native backing. Complete storage/code proofs, cross-chain reserve
+binding, explicit unit/rounding rules and accepted economic policy remain
+separate requirements.

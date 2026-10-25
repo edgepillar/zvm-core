@@ -227,3 +227,89 @@ it does not subtract any group from liability, add pending withdrawals or
 declare native backing. Complete storage/code proofs, cross-chain reserve
 binding, explicit unit/rounding rules and accepted economic policy remain
 separate requirements.
+
+
+## Same-root code and storage measurements
+
+A separately accepted `StoragePolicy` measures fixed raw storage keys for
+selected accounts. Its exact schema is `schema: 1` and `accounts`. Each account
+requires `id`, canonical lowercase `address`, accepted `codeHash` and nonempty
+`slots`; every slot requires `id` and a canonical lowercase 32-byte `key`.
+Account IDs and slot IDs match the group-ID grammar and are strictly sorted.
+Account addresses cannot repeat; keys cannot repeat within an account. A slot
+key may be zero. The owner accepts this layout and code identity independently,
+then retains `StoragePolicy.Fingerprint`: SHA-256 of
+`ZVM account storage measurement policy v1\n` plus canonical typed JSON.
+The policy has no default protocol addresses, code hashes, slot maps or units.
+
+Code hashes are Keccak-256 runtime-bytecode commitments from authenticated
+account leaves. A matching hash identifies bytes, not review approval or upgrade
+safety. Proxy bytecode alone does not establish implementation identity or
+layout semantics. A label such as pending, paid, fees or burned supplies no
+policy authority. Packed slots remain raw uint256 values; the utility performs
+no unpacking, NoM conversion, reserve rounding or economic interpretation.
+
+The selected account must be present in the verified complete account trie,
+with the accepted code hash and a nonzero storage-root commitment. Missing
+accounts are unavailable, never implicit zero contracts. Fixed keys are hashed
+with Keccak-256 and proved against each account's authenticated storage root.
+An exact empty storage root, or a verified non-membership path under a nonempty
+root, establishes zero. A stored leaf must encode a canonical nonzero uint256:
+leading zeros, oversized integers, malformed RLP and noncanonical trie shapes
+are refused. Unseen off-path storage is not claimed as complete storage coverage.
+
+`StorageWitness` is separate JSON with exactly `schema: 1` and `nodes`, a non-null
+array of lowercase hex RLP blobs. Nodes form the unique Keccak-sorted union of
+all selected proof paths. No roots, account addresses, keys or measurement labels
+are learned from it. Every supplied node must be used by a selected proof; a
+missing, altered, duplicated, out-of-order or unused node makes the complete
+measurement unavailable. Missing selected or unselected account-state nodes also
+fail complete account verification. The sparse proof is not an engine database.
+
+`StorageProofCollector` implements the writer for an owner's bounded local
+`trie.Prove` calls. It copies source blobs once, deduplicates by digest and
+finalizes once. Check every source error and bound synchronous prover calls
+externally. Collector output is an unverified artifact until the complete
+measurement verifier accepts it. It neither opens a live database nor contacts
+RPC. Do not treat a partial producer result as completed qualification.
+
+A proof fingerprint hashes `ZVM storage witness v1\n`, an unsigned 64-bit
+big-endian node count, then an unsigned 32-bit big-endian length and raw bytes
+for every sorted node. Hashing streams the raw nodes without another whole JSON
+encoding. This content fingerprint differs from the SHA-256 of a JSON file;
+retain exact file/transport identity separately when needed.
+
+`VerifyMeasurements`, `VerifySnapshotMeasurements` and `VerifyInputMeasurements`
+combine complete balances, optional independently pinned disjoint groups and
+selected account code/storage roots in the same full account traversal. They
+then verify all fixed storage paths. The result binds the complete state root,
+measurement policy digest, proof digest, raw values and presence flags. It
+contains account/slot IDs and account code/storage-root commitments, without an
+address/key inventory. Keep private inventories and meaningful private labels
+outside public status output. Any failure returns no partial measurement or
+checkpoint. Bound and framed modes preserve the existing accepted header,
+release, epoch, freshness and prior-checkpoint rules. Original witness, frame
+and checkpoint formats are unchanged; retain measurement pins separately.
+
+The command requires all three of `-storage-policy accepted-slots.json`,
+`-storage-policy-sha256 <independently-accepted-digest>` and
+`-storage-witness selected-storage-proof.json`. These are separate from the
+producer's snapshot frame. Raw-root, bound-file and `-bundle-stdin` modes are
+supported; an optional partition policy can be measured in the same operation.
+Only a fully verified result is printed. The command writes no checkpoint,
+signs no operation, executes no contract and changes no payout state.
+
+Defaults are 64 accounts, 1024 slots, 8192 unique proof nodes, 2 MiB raw node
+bytes and 65536 proof-node reads. The `-max-storage-accounts`,
+`-max-storage-slots`, `-max-storage-nodes`, `-max-storage-bytes` and
+`-max-storage-steps` flags set explicit bounds. Hard ceilings are 64 accounts,
+1024 slots, 65536 nodes, 16 MiB node bytes and 131072 reads. The existing context
+JSON byte/nesting/token/array limits additionally bound sidecar documents.
+
+Qualification uses committed bridge and fee runtime bytes in owned unsigned
+EVM fixtures, then compares proof measurements with committed geth StateDB
+lookups across pending, paid, settlement, withdrawal and mirror transitions.
+These are local raw-value/identity checks. Full supported-client and artifact
+provenance acceptance, real code/layout/upgrade authority, independently accepted
+NoM vault/frontier/reserve binding and economic liability/exclusion policy remain
+separate adoption gates. The native total-backing claim stays not_established.

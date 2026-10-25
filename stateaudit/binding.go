@@ -230,6 +230,10 @@ func VerifySnapshot(ctx context.Context, policy SnapshotPolicy, snapshot Snapsho
 }
 
 func verifySnapshot(ctx context.Context, policy SnapshotPolicy, snapshot Snapshot, witness Witness, previous *Checkpoint, now int64, limits Limits, bounds BindingLimits, observe func([]byte, *big.Int) error) (BoundSummary, error) {
+	return verifySnapshotDetailed(ctx, policy, snapshot, witness, previous, now, limits, bounds, observe, nil)
+}
+
+func verifySnapshotDetailed(ctx context.Context, policy SnapshotPolicy, snapshot Snapshot, witness Witness, previous *Checkpoint, now int64, limits Limits, bounds BindingLimits, observe func([]byte, *big.Int) error, observeAccount func([]byte, *types.StateAccount) error) (BoundSummary, error) {
 	if err := check(ctx, limits); err != nil {
 		return BoundSummary{}, err
 	}
@@ -280,7 +284,7 @@ func verifySnapshot(ctx context.Context, policy SnapshotPolicy, snapshot Snapsho
 	if last.Number.Uint64() != policy.BlockNumber || last.Hash().Hex() != policy.BlockHash || last.Time > uint64(now) || uint64(now)-last.Time > policy.MaxHeaderAgeSeconds || (policy.BlockNumber == 0 && policy.BlockHash != policy.Expected.GenesisHash) {
 		return BoundSummary{}, errors.New("snapshot does not match the accepted fresh block")
 	}
-	summary, err := verifyAccounts(ctx, last.Root, witness, limits, observe)
+	summary, err := verifyAccountsDetailed(ctx, last.Root, witness, limits, observe, observeAccount)
 	if err != nil {
 		return BoundSummary{}, err
 	}

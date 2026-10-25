@@ -29,6 +29,15 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	partitionLimits := stateaudit.PartitionLimits{}
 	flags.Uint64Var(&partitionLimits.MaxGroups, "max-partition-groups", 64, "maximum measured address groups, at most 64")
 	flags.Uint64Var(&partitionLimits.MaxAddresses, "max-partition-addresses", 4096, "maximum selected addresses, at most 4096")
+	storagePath := flags.String("storage-policy", "", "independently provisioned account code and fixed storage-slot policy")
+	storagePin := flags.String("storage-policy-sha256", "", "independently accepted storage measurement policy digest")
+	storageWitnessPath := flags.String("storage-witness", "", "bounded sorted union of selected storage proof nodes")
+	storageLimits := stateaudit.StorageLimits{}
+	flags.Uint64Var(&storageLimits.MaxAccounts, "max-storage-accounts", 64, "maximum selected storage accounts, at most 64")
+	flags.Uint64Var(&storageLimits.MaxSlots, "max-storage-slots", 1024, "maximum selected storage slots, at most 1024")
+	flags.Uint64Var(&storageLimits.MaxProofNodes, "max-storage-nodes", 8192, "maximum unique proof nodes, at most 65536")
+	flags.Uint64Var(&storageLimits.MaxProofBytes, "max-storage-bytes", 2<<20, "maximum raw proof node bytes, at most 16 MiB")
+	flags.Uint64Var(&storageLimits.MaxProofSteps, "max-storage-steps", 65536, "maximum proof node reads, at most 131072")
 	stream := flags.Bool("bundle-stdin", false, "verify one framed policy/context/checkpoint and witness from standard input")
 	bounds := stateaudit.BindingLimits{}
 	flags.Uint64Var(&bounds.MaxDocumentBytes, "max-context-bytes", 8<<20, "maximum bytes per snapshot context file")
@@ -65,6 +74,44 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		partition = &decoded
 	}
+	var measurements *stateaudit.MeasurementPolicy
+	var storageProof stateaudit.StorageWitness
+	storageConfigured := *storagePath != "" || *storagePin != "" || *storageWitnessPath != ""
+	if storageConfigured {
+		if *storagePath == "" || *storagePin == "" || *storageWitnessPath == "" {
+			fmt.Fprintln(stderr, "storage policy, independent digest and proof are required together")
+			return 2
+		}
+		raw, err := bindingFile(*storagePath, bounds.MaxDocumentBytes)
+		if err != nil {
+			fmt.Fprintln(stderr, "storage policy input rejected")
+			return 1
+		}
+		policy, err := stateaudit.DecodeStoragePolicy(raw, bounds.MaxDocumentBytes, storageLimits)
+		if err != nil {
+			fmt.Fprintln(stderr, "storage policy fields rejected")
+			return 1
+		}
+		pin, err := policy.Fingerprint(storageLimits)
+		if err != nil || pin != *storagePin {
+			fmt.Fprintln(stderr, "storage policy digest rejected")
+			return 1
+		}
+		raw, err = bindingFile(*storageWitnessPath, bounds.MaxDocumentBytes)
+		if err != nil {
+			fmt.Fprintln(stderr, "storage witness input rejected")
+			return 1
+		}
+		storageProof, err = stateaudit.DecodeStorageWitness(context.Background(), raw, bounds.MaxDocumentBytes, storageLimits)
+		if err != nil {
+			fmt.Fprintln(stderr, "storage witness encoding rejected")
+			return 1
+		}
+		measurements = &stateaudit.MeasurementPolicy{Storage: policy, StorageSHA256: pin}
+		if partition != nil {
+			measurements.Partition = &stateaudit.PinnedPartition{Policy: *partition, SHA256: *partitionPin, Limits: partitionLimits}
+		}
+	}
 	if *stream {
 		if *root != "" || *snapshotPath != "" || *policyPath != "" || *checkpointPath != "" || (*input != "" && *input != "-") || flags.NArg() != 0 {
 			fmt.Fprintln(stderr, "framed input cannot be combined with snapshot file or root overrides")
@@ -72,7 +119,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		var result any
 		var err error
-		if partition != nil {
+		if measurements != nil {
+			result, err = stateaudit.VerifyInputMeasurements(context.Background(), stdin, *measurements, storageProof, time.Now().Unix(), limits, bounds, storageLimits)
+		} else if partition != nil {
 			result, err = stateaudit.VerifyInputPartition(context.Background(), stdin, *partitionPin, *partition, time.Now().Unix(), limits, bounds, partitionLimits)
 		} else {
 			result, err = stateaudit.VerifyInput(context.Background(), stdin, time.Now().Unix(), limits, bounds)
@@ -133,7 +182,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	var output any
-	if partition != nil {
+	if measurements != nil {
+		if bound {
+			output, err = stateaudit.VerifySnapshotMeasurements(context.Background(), inputs.policy, inputs.snapshot, *measurements, storageProof, witness, inputs.checkpoint, time.Now().Unix(), limits, bounds, storageLimits)
+		} else {
+			output, err = stateaudit.VerifyMeasurements(context.Background(), common.BytesToHash(rawRoot), *measurements, storageProof, witness, limits, storageLimits)
+		}
+	} else if partition != nil {
 		if bound {
 			output, err = stateaudit.VerifySnapshotPartition(context.Background(), inputs.policy, inputs.snapshot, *partitionPin, *partition, witness, inputs.checkpoint, time.Now().Unix(), limits, bounds, partitionLimits)
 		} else {

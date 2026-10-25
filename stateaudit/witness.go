@@ -166,6 +166,10 @@ func Verify(ctx context.Context, expectedRoot common.Hash, witness Witness, limi
 }
 
 func verifyAccounts(ctx context.Context, expectedRoot common.Hash, witness Witness, limits Limits, observe func([]byte, *big.Int) error) (Summary, error) {
+	return verifyAccountsDetailed(ctx, expectedRoot, witness, limits, observe, nil)
+}
+
+func verifyAccountsDetailed(ctx context.Context, expectedRoot common.Hash, witness Witness, limits Limits, observe func([]byte, *big.Int) error, observeAccount func([]byte, *types.StateAccount) error) (Summary, error) {
 	size, err := wireSize(ctx, witness, limits)
 	if err != nil {
 		return Summary{}, err
@@ -222,6 +226,11 @@ func verifyAccounts(ctx context.Context, expectedRoot common.Hash, witness Witne
 		canonical, err := rlp.EncodeToBytes(&account)
 		if err != nil || !bytes.Equal(canonical, it.LeafBlob()) {
 			return Summary{}, errors.New("noncanonical state account")
+		}
+		if observeAccount != nil {
+			if err := observeAccount(it.LeafKey(), &account); err != nil {
+				return Summary{}, err
+			}
 		}
 		balance := account.Balance.ToBig()
 		if observe != nil {

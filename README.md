@@ -82,4 +82,6 @@ explicit inventory, failure retention and distribution/acceptance boundaries.
 The SBOM command also has an explicit [local source profile](release/artifacts/LOCAL-SOURCES.md)
 for independently pinned flat Core replacements. It checks source files and Git
 object bindings without running Git, fetching modules or exporting machine paths.
-This profile remains separate from default release selection and acceptance.
+Explicit contents schema 2 composes it with selected files and optional signatures,
+retaining source observations through final verification. Default release selection
+and release acceptance retain their existing scope.

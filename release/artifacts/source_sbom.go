@@ -232,7 +232,7 @@ func observeGoSources(p GoSourceSBOMPolicy, controls map[string]File, options Go
 	}
 	data := map[string][]byte{}
 	for name, pin := range controls {
-		data[name], err = selectedDocument(d, pin, result.control.before[name])
+		data[name], err = selectedControlDocument(d, pin, result.control.before[name], true)
 		if err != nil {
 			return nil, err
 		}
@@ -305,64 +305,101 @@ func goSourceSPDX(p GoSourceSBOMPolicy, policySHA string) spdxDocument {
 }
 
 func GenerateGoSourceSBOM(policyBytes, goModBytes, goSumBytes []byte, subject string, options GoSourceOptions) ([]byte, GoSourceSBOMResult, error) {
+	raw, result, sources, err := generateGoSourceSBOMObserved(policyBytes, goModBytes, goSumBytes, subject, options, nil)
+	if sources != nil {
+		defer sources.close()
+	}
+	return raw, result, err
+}
+func generateGoSourceSBOMObserved(policyBytes, goModBytes, goSumBytes []byte, subject string, options GoSourceOptions, completeControls map[string]File) ([]byte, GoSourceSBOMResult, *sourceObservation, error) {
 	var p GoSourceSBOMPolicy
 	if err := decode(policyBytes, &p); err != nil {
-		return nil, GoSourceSBOMResult{}, err
+		return nil, GoSourceSBOMResult{}, nil, err
 	}
 	controls, err := p.validate()
 	if err != nil {
-		return nil, GoSourceSBOMResult{}, err
+		return nil, GoSourceSBOMResult{}, nil, err
 	}
 	if len(goModBytes) == 0 || len(goModBytes) > MaxDocumentBytes || len(goSumBytes) > MaxDocumentBytes || sum(goModBytes) != p.Go.GoModSHA256 || sum(goSumBytes) != p.Go.GoSumSHA256 {
-		return nil, GoSourceSBOMResult{}, errors.New("qualified Go module/checksum inputs do not match source policy")
+		return nil, GoSourceSBOMResult{}, nil, errors.New("qualified Go module/checksum inputs do not match source policy")
 	}
 	if len(goSumBytes) != 0 || len(p.Go.Modules) != 0 {
 		locks, err := lockModules(goSumBytes)
 		if err != nil {
-			return nil, GoSourceSBOMResult{}, err
+			return nil, GoSourceSBOMResult{}, nil, err
 		}
 		for _, module := range p.Go.Modules {
 			if locks[module.EffectivePath+" "+module.EffectiveVersion] != module.Sum {
-				return nil, GoSourceSBOMResult{}, errors.New("remote Go checksum is absent or changed")
+				return nil, GoSourceSBOMResult{}, nil, errors.New("remote Go checksum is absent or changed")
 			}
 		}
 	}
+	if completeControls != nil {
+		for name, pin := range controls {
+			if completeControls[name] != pin {
+				return nil, GoSourceSBOMResult{}, nil, errors.New("commit controls are absent from the complete input inventory")
+			}
+		}
+		controls = completeControls
+	}
 	sources, err := observeGoSources(p, controls, options)
 	if err != nil {
-		return nil, GoSourceSBOMResult{}, err
+		return nil, GoSourceSBOMResult{}, nil, err
 	}
-	defer sources.close()
+	good := false
+	defer func() {
+		if !good {
+			sources.close()
+		}
+	}()
 	info, err := readGoSubject(subject, p.Go.Subject)
 	if err != nil {
-		return nil, GoSourceSBOMResult{}, err
+		return nil, GoSourceSBOMResult{}, nil, err
 	}
 	if err := matchGoSourceInventory(info, p); err != nil {
-		return nil, GoSourceSBOMResult{}, err
+		return nil, GoSourceSBOMResult{}, nil, err
 	}
 	if err := sources.unchanged(); err != nil {
-		return nil, GoSourceSBOMResult{}, err
+		return nil, GoSourceSBOMResult{}, nil, err
 	}
 	canonical, _ := json.Marshal(p)
 	policySHA := sum(canonical)
 	raw, err := json.MarshalIndent(goSourceSPDX(p, policySHA), "", "  ")
 	if err != nil || len(raw)+1 > MaxDocumentBytes {
-		return nil, GoSourceSBOMResult{}, errors.New("generated source SPDX profile exceeds its limit")
+		return nil, GoSourceSBOMResult{}, nil, errors.New("generated source SPDX profile exceeds its limit")
 	}
 	raw = append(raw, '\n')
-	return raw, GoSourceSBOMResult{GoSBOMResult: GoSBOMResult{Profile: GoSourceSBOMProfile, PolicySHA256: policySHA, SBOMSHA256: sum(raw), SubjectSHA256: p.Go.Subject.SHA256, ModulesVerified: len(p.Go.Modules) + len(p.LocalSources), SPDXProfileVerified: true, SubjectBytesVerified: true, GoBuildInfoMatched: true, LockedModulesMatched: true}, LocalSourceTreesVerified: len(p.LocalSources), LocalSourceFilesVerified: sources.files, LocalSourceBytesVerified: sources.bytes, LocalCommitObjectsVerified: len(controls)}, nil
+	good = true
+	return raw, GoSourceSBOMResult{GoSBOMResult: GoSBOMResult{Profile: GoSourceSBOMProfile, PolicySHA256: policySHA, SBOMSHA256: sum(raw), SubjectSHA256: p.Go.Subject.SHA256, ModulesVerified: len(p.Go.Modules) + len(p.LocalSources), SPDXProfileVerified: true, SubjectBytesVerified: true, GoBuildInfoMatched: true, LockedModulesMatched: true}, LocalSourceTreesVerified: len(p.LocalSources), LocalSourceFilesVerified: sources.files, LocalSourceBytesVerified: sources.bytes, LocalCommitObjectsVerified: len(pinnedCommitObjects(p))}, sources, nil
+}
+func pinnedCommitObjects(p GoSourceSBOMPolicy) map[string]File {
+	pins := map[string]File{}
+	for _, local := range p.LocalSources {
+		pins[local.CommitObject.Path] = local.CommitObject
+	}
+	return pins
 }
 func CheckGoSourceSBOM(document, policyBytes, goModBytes, goSumBytes []byte, subject string, options GoSourceOptions) (GoSourceSBOMResult, error) {
-	if _, err := objectDocumentBudget(document, 32768); err != nil {
-		return GoSourceSBOMResult{}, err
+	result, sources, err := checkGoSourceSBOMObserved(document, policyBytes, goModBytes, goSumBytes, subject, options, nil)
+	if sources != nil {
+		defer sources.close()
 	}
-	expected, result, err := GenerateGoSourceSBOM(policyBytes, goModBytes, goSumBytes, subject, options)
+	return result, err
+}
+
+func checkGoSourceSBOMObserved(document, policyBytes, goModBytes, goSumBytes []byte, subject string, options GoSourceOptions, controls map[string]File) (GoSourceSBOMResult, *sourceObservation, error) {
+	if _, err := objectDocumentBudget(document, 32768); err != nil {
+		return GoSourceSBOMResult{}, nil, err
+	}
+	expected, result, sources, err := generateGoSourceSBOMObserved(policyBytes, goModBytes, goSumBytes, subject, options, controls)
 	if err != nil {
-		return GoSourceSBOMResult{}, err
+		return GoSourceSBOMResult{}, nil, err
 	}
 	var a, b any
 	if json.Unmarshal(document, &a) != nil || json.Unmarshal(expected, &b) != nil || !reflect.DeepEqual(a, b) {
-		return GoSourceSBOMResult{}, errors.New("source SPDX profile, subjects, package inventory or relationships differ from independent inputs")
+		sources.close()
+		return GoSourceSBOMResult{}, nil, errors.New("source SPDX profile, subjects, package inventory or relationships differ from independent inputs")
 	}
 	result.SBOMSHA256 = sum(document)
-	return result, nil
+	return result, sources, nil
 }

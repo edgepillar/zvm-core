@@ -18,9 +18,10 @@ a module checksum for local source.
 
 These two source options are required together only for this explicit profile.
 The original `spdx-2.3-go-buildinfo-v1` mode retains its previous behavior and
-continues to refuse local replacements. Existing artifact contents/bundle modes
-currently select that original profile; they do not silently accept this new
-source envelope. Integration with their complete control policy is separate work.
+continues to refuse local replacements. Artifact contents/bundle schema 1 also
+retains that original profile. Explicit [contents schema 2](CONTENTS.md) selects
+local-source envelopes with a complete commit-control inventory and a private
+per-artifact directory mapping; observations remain open through signatures.
 
 ## Independent policy and private locations
 

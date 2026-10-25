@@ -41,10 +41,12 @@ files fail. Documents are at most 1 MiB each, the unique input set is at most
 32 MiB, and the existing artifact/control count limits apply. No dependency
 tree, source checkout, input archive or executable is copied into this directory.
 
-Every selected artifact currently requires the explicit
+Schema 1 requires the explicit
 [`spdx-2.3-go-buildinfo-v1` profile](SBOM.md) and `kind: binary`. Other formats and
-coverage profiles are refused. Local replacements, other languages, containers
-and complete standard-library/OS/native/asset coverage remain separate work.
+coverage profiles are refused by that schema. Schema 2 additionally supports the
+explicit [local source profile](LOCAL-SOURCES.md), as described below. Other
+languages, containers and complete standard-library/OS/native/asset coverage
+remain separate work.
 
 The Go policy must match the artifact's exact relative path, bytes and SHA-256,
 source repository/commit/tree/Gitlink inventory, qualification reference and
@@ -58,6 +60,65 @@ inventory and identities are checked again; the selected artifact inventory is
 also checked at completion. Observed substitutions and late extra files fail.
 This is a bounded identity/byte observation on a trusted local host, not an OS
 sandbox or a lock against a hostile concurrent owner.
+
+## Explicit local source composition
+
+`SourceContentsPolicy` uses `schema: 2` with the same top-level selection digest
+and exact sorted artifact inventory. Every requirement has the five schema 1
+members above and a required `commitObjects` array. For a remote-module profile
+this array is empty. For `spdx-2.3-go-local-source-v1` it contains the sorted,
+unique `File` pins for every distinct raw commit control named by that source
+policy. Missing, extra, changed or differently assigned controls fail. Mixed
+remote/local profiles can share controls only with identical roles and pins.
+An empty, correctly pinned `goSum` is allowed only for the local-source profile;
+its source-policy semantics still require zero remote modules.
+
+The exact `content-inputs` directory includes those commit controls together
+with all selected policies and parent module/checksum inputs. It excludes source
+trees. The independent contents-policy digest binds this complete control set.
+Schema 1 retains its exact JSON shape, receipt fields and original profile.
+
+Local-source composition also requires a separate private mapping:
+
+```json
+{
+  "schema": 1,
+  "artifacts": [
+    {"id": "darwin-arm64", "sources": [
+      {"path": "zvm-core", "directory": "/path/to/qualified/core"}
+    ]}
+  ]
+}
+```
+
+Artifact IDs and logical source paths are sorted and unique. The mapping covers
+exactly the artifacts selecting local-source profiles and exactly their logical
+Gitlink paths. No mapping is accepted for a remote-only profile. Physical
+directories remain runtime inputs; policies, SBOMs and receipts contain no such
+paths. Mapping documents are bounded, strict JSON, with no unknown or duplicate
+members. They do not select trusted source authority.
+
+```sh
+./zvm-artifact-check -manifest manifest.json -policy policy.json -directory selected \
+  -contents-policy contents-policy-v2.json -content-inputs content-controls \
+  -content-sources private-source-directories.json
+```
+
+The corresponding APIs are `CheckContentsWithOptions` and
+`CheckBundleWithOptions`, with `ContentsOptions.SourceDirectories` keyed first
+by artifact ID, then logical source path. `CanonicalSourceContentsPolicy`
+validates and serializes schema 2. The old APIs require no new options and cannot
+infer a local source location. The four provenance options compose the actual
+signature verifier with schema 2 in the same command.
+
+Every selected local tree stays open after SBOM validation through signature
+verification and final artifact/control checks. Late source bytes, extra files,
+replaced identities or commit/control changes fail the whole operation.
+`SourceContentsResult` and `SourceBundleResult` add local tree/file/byte/commit
+counts and explicit false compiler-use/parent-tree assertions. Counts are per
+verified artifact profile; shared inputs can be checked for several artifacts.
+`sbomProfileScope` lists the sorted distinct selected profiles, comma-separated.
+No local-source or signature result survives a later failure.
 
 ## Result scope
 
@@ -81,6 +142,11 @@ verifier results to test callback ordering, output fields, cross-policy refusal,
 late control mutation and failure atomicity. They are not actual signature
 verification. The existing genuine signed public fixture retains its separate
 subject/trust policy and cryptographic qualification.
+
+Opt-in local-Core controls also exercise the schema 2 API, complete commit
+inventory, explicit runtime mapping, late source/commit changes and zero partial
+receipts. Their successful signature-composition protocol is synthetic; the
+unsigned actual Core qualification subject fails the actual combined verifier.
 
 A real ZVM Go artifact signed under an accepted production workflow/root policy
 is still required before claiming an actual joint project release verification.

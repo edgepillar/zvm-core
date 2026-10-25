@@ -52,35 +52,66 @@ type BundleResult struct {
 type selectionVerifier func(*directory, map[string]File, map[string]os.FileInfo) error
 
 type contentVerifier struct {
-	selection Policy
-	policy    ContentsPolicy
-	dir       *directory
-	files     map[string]File
-	before    map[string]os.FileInfo
-	data      map[string][]byte
-	details   SBOMVerification
+	selection   Policy
+	policy      ContentsPolicy
+	dir         *directory
+	files       map[string]File
+	before      map[string]os.FileInfo
+	data        map[string][]byte
+	commits     map[string][]File
+	directories map[string]map[string]string
+	sources     []*sourceObservation
+	local       LocalSourceVerification
+	details     SBOMVerification
 }
 
 func (c ContentsPolicy) validate(p Policy) (map[string]File, error) {
+	if c.Schema != 1 {
+		return nil, errors.New("unsupported legacy contents policy schema")
+	}
+	return validateContents(p, c.SelectionPolicySHA256, c.Artifacts, nil)
+}
+
+func validateContents(p Policy, selectionSHA string, requirements []SBOMRequirement, commits map[string][]File) (map[string]File, error) {
 	canonical, err := CanonicalPolicy(p)
-	if err != nil || c.Schema != 1 || c.SelectionPolicySHA256 != sum(canonical) || len(c.Artifacts) != len(p.Artifacts) {
+	if err != nil || selectionSHA != sum(canonical) || len(requirements) != len(p.Artifacts) {
 		return nil, errors.New("contents policy does not match the independent selection policy")
 	}
 	files := map[string]File{}
 	roles := map[string]string{}
 	aliases := map[string]string{}
 	var total int64
-	for i, required := range c.Artifacts {
-		if required.ID != p.Artifacts[i].ID || required.Profile != GoSBOMProfile || p.Artifacts[i].Kind != "binary" {
+	for i, required := range requirements {
+		local := commits != nil && required.Profile == GoSourceSBOMProfile
+		if required.ID != p.Artifacts[i].ID || (!local && required.Profile != GoSBOMProfile) || p.Artifacts[i].Kind != "binary" {
 			return nil, errors.New("every selected artifact must have a supported exact SBOM requirement")
 		}
-		for _, entry := range []struct {
+		entries := []struct {
 			pin  File
 			role string
-		}{{required.Policy, "policy"}, {required.GoMod, "goMod"}, {required.GoSum, "goSum"}} {
+		}{{required.Policy, "policy"}, {required.GoMod, "goMod"}, {required.GoSum, "goSum"}}
+		if commits != nil {
+			pins := commits[required.ID]
+			if pins == nil || (local && (len(pins) == 0 || len(pins) > MaxLocalSources)) || (!local && len(pins) != 0) {
+				return nil, errors.New("exact commit controls are required only for local-source profiles")
+			}
+			last := ""
+			for _, pin := range pins {
+				if pin.Path <= last {
+					return nil, errors.New("commit controls must be sorted and unique")
+				}
+				entries = append(entries, struct {
+					pin  File
+					role string
+				}{pin, "commitObject"})
+				last = pin.Path
+			}
+		}
+		for _, entry := range entries {
 			f := entry.pin
 			folded := strings.ToLower(f.Path)
-			if !relative(f.Path) || f.Bytes <= 0 || f.Bytes > MaxDocumentBytes || !digest(f.SHA256, 64) {
+			emptyLock := local && entry.role == "goSum" && f.Bytes == 0 && f.SHA256 == sum(nil)
+			if !relative(f.Path) || (f.Bytes <= 0 && !emptyLock) || f.Bytes > MaxDocumentBytes || !digest(f.SHA256, 64) {
 				return nil, errors.New("invalid bounded SBOM control-file pin")
 			}
 			if other, exists := aliases[folded]; exists && other != f.Path {
@@ -119,18 +150,22 @@ func (c ContentsPolicy) validate(p Policy) (map[string]File, error) {
 }
 
 func prepareContents(policyBytes, contentsBytes []byte, root string) (*contentVerifier, error) {
+	return prepareContentsWithOptions(policyBytes, contentsBytes, root, ContentsOptions{})
+}
+
+func prepareContentsWithOptions(policyBytes, contentsBytes []byte, root string, options ContentsOptions) (*contentVerifier, error) {
 	var p Policy
-	var c ContentsPolicy
 	if err := decode(policyBytes, &p); err != nil {
 		return nil, err
 	}
 	if _, err := p.validate(); err != nil {
 		return nil, err
 	}
-	if err := decode(contentsBytes, &c); err != nil {
+	c, commits, files, err := parseContentsPolicy(contentsBytes, p)
+	if err != nil {
 		return nil, err
 	}
-	files, err := c.validate(p)
+	directories, scope, err := contentsDirectories(c.Artifacts, options)
 	if err != nil {
 		return nil, err
 	}
@@ -146,10 +181,10 @@ func prepareContents(policyBytes, contentsBytes []byte, root string) (*contentVe
 		d.root.Close()
 		return nil, err
 	}
-	v := &contentVerifier{selection: p, policy: c, dir: d, files: files, before: before, data: map[string][]byte{}, details: SBOMVerification{
-		ContentsPolicySHA256: sum(contentsBytes), ControlFilesVerified: len(files), SBOMProfileScope: GoSBOMProfile}}
+	v := &contentVerifier{selection: p, policy: c, dir: d, files: files, before: before, commits: commits, directories: directories, data: map[string][]byte{}, details: SBOMVerification{
+		ContentsPolicySHA256: sum(contentsBytes), ControlFilesVerified: len(files), SBOMProfileScope: scope}}
 	for name, pin := range files {
-		raw, err := selectedDocument(d, pin, before[name])
+		raw, err := selectedControlDocument(d, pin, before[name], commits != nil)
 		if err != nil {
 			d.root.Close()
 			return nil, err
@@ -159,8 +194,18 @@ func prepareContents(policyBytes, contentsBytes []byte, root string) (*contentVe
 	return v, nil
 }
 
-func (v *contentVerifier) close() { v.dir.root.Close() }
+func (v *contentVerifier) close() {
+	for _, source := range v.sources {
+		source.close()
+	}
+	v.dir.root.Close()
+}
 func (v *contentVerifier) unchanged() error {
+	for _, source := range v.sources {
+		if err := source.unchanged(); err != nil {
+			return err
+		}
+	}
 	last, err := inventory(v.dir, v.files)
 	if err != nil {
 		return err
@@ -180,14 +225,34 @@ func (v *contentVerifier) verify(d *directory, files map[string]File, before map
 	for i, required := range v.policy.Artifacts {
 		artifact := v.selection.Artifacts[i]
 		var goPolicy GoSBOMPolicy
-		if err := decode(v.data[required.Policy.Path], &goPolicy); err != nil {
-			return err
+		if required.Profile == GoSourceSBOMProfile {
+			var sourcePolicy GoSourceSBOMPolicy
+			if err := decode(v.data[required.Policy.Path], &sourcePolicy); err != nil {
+				return err
+			}
+			controls, err := sourcePolicy.validate()
+			if err != nil {
+				return err
+			}
+			if len(controls) != len(v.commits[required.ID]) {
+				return errors.New("local commit controls do not match independent contents policy")
+			}
+			for _, pin := range v.commits[required.ID] {
+				if controls[pin.Path] != pin {
+					return errors.New("local commit control differs from independent contents policy")
+				}
+			}
+			goPolicy = sourcePolicy.Go
+		} else {
+			if err := decode(v.data[required.Policy.Path], &goPolicy); err != nil {
+				return err
+			}
 		}
 		settings := map[string]string{}
 		for _, s := range goPolicy.BuildSettings {
 			settings[s.Key] = s.Value
 		}
-		if goPolicy.Profile != required.Profile || goPolicy.Subject != files[artifact.SubjectPath] ||
+		if goPolicy.Profile != GoSBOMProfile || goPolicy.Subject != files[artifact.SubjectPath] ||
 			!reflect.DeepEqual(goPolicy.Source, v.selection.Release.Source) || goPolicy.QualifiedInputsSHA256 != v.selection.Release.QualificationSHA256 ||
 			goPolicy.GoModSHA256 != required.GoMod.SHA256 || goPolicy.GoSumSHA256 != required.GoSum.SHA256 || artifact.Platform != settings["GOOS"]+"/"+settings["GOARCH"] {
 			return errors.New("SBOM source, qualification, subject, platform or lock inputs do not match selected release")
@@ -196,12 +261,28 @@ func (v *contentVerifier) verify(d *directory, files map[string]File, before map
 		if err != nil {
 			return err
 		}
-		result, err := CheckGoSBOM(doc, v.data[required.Policy.Path], v.data[required.GoMod.Path], v.data[required.GoSum.Path], filepath.Join(d.root.Name(), filepath.FromSlash(artifact.SubjectPath)))
-		if err != nil {
-			return err
+		subject := filepath.Join(d.root.Name(), filepath.FromSlash(artifact.SubjectPath))
+		var modules int
+		if required.Profile == GoSourceSBOMProfile {
+			result, source, err := checkGoSourceSBOMObserved(doc, v.data[required.Policy.Path], v.data[required.GoMod.Path], v.data[required.GoSum.Path], subject, GoSourceOptions{Directories: v.directories[required.ID], ControlDirectory: v.dir.root.Name()}, v.files)
+			if err != nil {
+				return err
+			}
+			v.sources = append(v.sources, source)
+			modules = result.ModulesVerified
+			v.local.LocalSourceTreesVerified += result.LocalSourceTreesVerified
+			v.local.LocalSourceFilesVerified += result.LocalSourceFilesVerified
+			v.local.LocalSourceBytesVerified += result.LocalSourceBytesVerified
+			v.local.LocalCommitObjectsVerified += result.LocalCommitObjectsVerified
+		} else {
+			result, err := CheckGoSBOM(doc, v.data[required.Policy.Path], v.data[required.GoMod.Path], v.data[required.GoSum.Path], subject)
+			if err != nil {
+				return err
+			}
+			modules = result.ModulesVerified
 		}
 		v.details.SBOMProfilesVerified++
-		v.details.GoModuleRecordsVerified += result.ModulesVerified
+		v.details.GoModuleRecordsVerified += modules
 	}
 	return v.unchanged()
 }

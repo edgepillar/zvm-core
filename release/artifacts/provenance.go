@@ -165,7 +165,11 @@ func objectDocumentBudget(raw []byte, maxNodes int) (map[string]json.RawMessage,
 }
 
 func selectedDocument(d *directory, pin File, before os.FileInfo) ([]byte, error) {
-	if pin.Bytes <= 0 || pin.Bytes > MaxDocumentBytes {
+	return selectedControlDocument(d, pin, before, false)
+}
+
+func selectedControlDocument(d *directory, pin File, before os.FileInfo, allowEmpty bool) ([]byte, error) {
+	if pin.Bytes < 0 || (pin.Bytes == 0 && !allowEmpty) || pin.Bytes > MaxDocumentBytes {
 		return nil, errors.New("sidecar exceeds document limit")
 	}
 	f, err := openEntry(d.root, pin.Path, false)

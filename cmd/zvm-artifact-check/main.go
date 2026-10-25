@@ -25,8 +25,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 	temporary := flags.String("temporary-directory", "", "Explicit owned directory for bounded verifier scratch")
 	contentsPolicy := flags.String("contents-policy", "", "Independent complete SBOM-profile/control-file policy JSON")
 	controls := flags.String("content-inputs", "", "Dedicated exact SBOM control-file directory")
+	sources := flags.String("content-sources", "", "Private per-artifact local-source directory mapping JSON")
 	flags.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zvm-artifact-check -manifest FILE -policy FILE -directory DIR\nSignatures require all of: -provenance-policy FILE -verifier FILE -trusted-root FILE -temporary-directory DIR\nSelected Go SBOM profiles require both: -contents-policy FILE -content-inputs DIR\nCombined mode verifies both inside the same file observation. Complete runtime/license coverage, build reproduction and release acceptance remain unverified.")
+		fmt.Fprintln(stderr, "Usage: zvm-artifact-check -manifest FILE -policy FILE -directory DIR\nSignatures require all of: -provenance-policy FILE -verifier FILE -trusted-root FILE -temporary-directory DIR\nSelected Go SBOM profiles require both: -contents-policy FILE -content-inputs DIR\nContents schema 2 local-source profiles also require: -content-sources FILE\nCombined mode verifies both inside the same file observation. Complete runtime/license coverage, build reproduction and release acceptance remain unverified.")
 	}
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -58,6 +59,20 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if (*contentsPolicy == "") != (*controls == "") {
 		return errors.New("contents policy and explicit content inputs are required together")
 	}
+	if *sources != "" && *contentsPolicy == "" {
+		return errors.New("content sources require an independent contents policy and inputs")
+	}
+	var contentOptions artifacts.ContentsOptions
+	if *sources != "" {
+		raw, readErr := artifacts.ReadDocument(*sources)
+		if readErr != nil {
+			return fmt.Errorf("content sources: %w", readErr)
+		}
+		contentOptions.SourceDirectories, err = artifacts.ParseContentsSourceDirectories(raw)
+		if err != nil {
+			return err
+		}
+	}
 	var contents []byte
 	if *contentsPolicy != "" {
 		contents, err = artifacts.ReadDocument(*contentsPolicy)
@@ -72,11 +87,15 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("provenance policy: %w", readErr)
 		}
 		options := artifacts.ProvenanceOptions{VerifierPath: *verifier, TrustedRootPath: *trustedRoot, TemporaryDirectory: *temporary}
-		if contents != nil {
+		if contents != nil && *sources != "" {
+			result, err = artifacts.CheckBundleWithOptions(context.Background(), m, p, v, contents, *directory, *controls, contentOptions, options)
+		} else if contents != nil {
 			result, err = artifacts.CheckBundle(context.Background(), m, p, v, contents, *directory, *controls, options)
 		} else {
 			result, err = artifacts.CheckProvenance(context.Background(), m, p, v, *directory, options)
 		}
+	} else if contents != nil && *sources != "" {
+		result, err = artifacts.CheckContentsWithOptions(m, p, contents, *directory, *controls, contentOptions)
 	} else if contents != nil {
 		result, err = artifacts.CheckContents(m, p, contents, *directory, *controls)
 	} else {

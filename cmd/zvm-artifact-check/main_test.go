@@ -98,7 +98,7 @@ func TestContentsOptionsAndFailureDoNotProduceSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	common := []string{"-manifest", filepath.Join(base, "manifest.json"), "-policy", filepath.Join(base, "policy.json"), "-directory", filepath.Join(base, "payloads")}
-	for _, option := range []string{"-contents-policy", "-content-inputs"} {
+	for _, option := range []string{"-contents-policy", "-content-inputs", "-content-sources"} {
 		var out, errout bytes.Buffer
 		err := run(append(append([]string{}, common...), option, "/private/not-for-output"), &out, &errout)
 		if err == nil || out.Len() != 0 || strings.Contains(err.Error(), "not-for-output") {

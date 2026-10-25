@@ -78,3 +78,8 @@ The standalone `go build ./cmd/zvm-artifact-pack` command streams a deterministi
 selected-file ZIP and verifies independently pinned packages without extraction.
 See the [archive profile](release/artifacts/ARCHIVE.md) for fixed metadata,
 explicit inventory, failure retention and distribution/acceptance boundaries.
+
+The SBOM command also has an explicit [local source profile](release/artifacts/LOCAL-SOURCES.md)
+for independently pinned flat Core replacements. It checks source files and Git
+object bindings without running Git, fetching modules or exporting machine paths.
+This profile remains separate from default release selection and acceptance.

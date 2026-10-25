@@ -144,3 +144,7 @@ replacement, rather than assuming a one-module tool fixture. This control reads
 the subject without execution; fixture provisioning retains its original source,
 build and qualification receipts. It does not relabel an older retained build as
 a newly compiled current-head output.
+
+For the separately selected local-replacement profile, see
+[local source binding](LOCAL-SOURCES.md). The original profile continues to
+refuse local replacements and its output/coverage semantics are unchanged.

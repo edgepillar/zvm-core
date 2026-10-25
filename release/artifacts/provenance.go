@@ -101,6 +101,10 @@ func (v ProvenancePolicy) validate(p Policy) error {
 // objectDocument rejects concatenated/multiple records and duplicate keys before
 // delegating cryptography to the pinned verifier. It does not verify a signature.
 func objectDocument(raw []byte) (map[string]json.RawMessage, error) {
+	return objectDocumentBudget(raw, 8192)
+}
+
+func objectDocumentBudget(raw []byte, maxNodes int) (map[string]json.RawMessage, error) {
 	if len(raw) == 0 || len(raw) > MaxDocumentBytes || !utf8.Valid(raw) {
 		return nil, errors.New("invalid bounded JSON document")
 	}
@@ -110,7 +114,7 @@ func objectDocument(raw []byte) (map[string]json.RawMessage, error) {
 	var walk func(int) error
 	walk = func(depth int) error {
 		nodes++
-		if depth > 32 || nodes > 8192 {
+		if depth > 32 || nodes > maxNodes {
 			return errors.New("JSON structure exceeds limit")
 		}
 		token, err := d.Token()

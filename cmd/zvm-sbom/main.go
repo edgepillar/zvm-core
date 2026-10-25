@@ -20,9 +20,11 @@ func run(args []string, stdout, stderr io.Writer) error {
 	goSum := flags.String("go-sum", "", "Selected source go.sum")
 	subject := flags.String("subject", "", "Qualified Go executable; read only, never executed")
 	check := flags.String("check", "", "Existing SPDX document to check instead of generating")
+	sourceInputs := flags.String("source-inputs", "", "Private source-directory mapping for the explicit local-source profile")
+	sourceControls := flags.String("source-controls", "", "Dedicated independently pinned raw commit-object directory")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			fmt.Fprintln(stderr, "Usage: zvm-sbom -policy FILE -go-mod FILE -go-sum FILE -subject FILE [-check FILE]\nGenerates SPDX JSON or checks the exact selected Go build-info profile. Runtime/license coverage, source authority and release acceptance remain unqualified.")
+			fmt.Fprintln(stderr, "Usage: zvm-sbom -policy FILE -go-mod FILE -go-sum FILE -subject FILE [-check FILE]\nLocal source profile additionally requires both: -source-inputs FILE -source-controls DIR\nGenerates SPDX JSON or checks the exact selected Go profile. Runtime/license coverage, source authority and release acceptance remain unqualified.")
 			return nil
 		}
 		return errors.New("invalid command arguments; use -h for usage")
@@ -35,11 +37,36 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("policy: %w", err)
 	}
+	profile, err := artifacts.GoSBOMPolicyProfile(p)
+	if err != nil {
+		return err
+	}
+	local := profile == artifacts.GoSourceSBOMProfile
+	if (local && (*sourceInputs == "" || *sourceControls == "")) || (!local && (*sourceInputs != "" || *sourceControls != "")) {
+		return errors.New("source options are required together only for the explicit local-source profile")
+	}
+	var options artifacts.GoSourceOptions
+	if local {
+		raw, err := read(*sourceInputs)
+		if err != nil {
+			return fmt.Errorf("source mapping: %w", err)
+		}
+		roots, err := artifacts.ParseGoSourceDirectories(raw)
+		if err != nil {
+			return err
+		}
+		options = artifacts.GoSourceOptions{Directories: roots, ControlDirectory: *sourceControls}
+	}
 	m, err := read(*goMod)
 	if err != nil {
 		return fmt.Errorf("module input: %w", err)
 	}
-	s, err := read(*goSum)
+	var s []byte
+	if local {
+		s, err = artifacts.ReadGoSourceChecksum(*goSum)
+	} else {
+		s, err = read(*goSum)
+	}
 	if err != nil {
 		return fmt.Errorf("checksum input: %w", err)
 	}
@@ -48,7 +75,12 @@ func run(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return fmt.Errorf("SPDX document: %w", err)
 		}
-		result, err := artifacts.CheckGoSBOM(doc, p, m, s, *subject)
+		var result any
+		if local {
+			result, err = artifacts.CheckGoSourceSBOM(doc, p, m, s, *subject, options)
+		} else {
+			result, err = artifacts.CheckGoSBOM(doc, p, m, s, *subject)
+		}
 		if err != nil {
 			return err
 		}
@@ -57,7 +89,12 @@ func run(args []string, stdout, stderr io.Writer) error {
 		}
 		return nil
 	}
-	doc, _, err := artifacts.GenerateGoSBOM(p, m, s, *subject)
+	var doc []byte
+	if local {
+		doc, _, err = artifacts.GenerateGoSourceSBOM(p, m, s, *subject, options)
+	} else {
+		doc, _, err = artifacts.GenerateGoSBOM(p, m, s, *subject)
+	}
 	if err != nil {
 		return err
 	}

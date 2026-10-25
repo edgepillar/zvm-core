@@ -71,6 +71,15 @@ func (d *directory) checkAncestors() error {
 // ReadDocument reads one explicitly named regular document without following
 // symlink ancestors, copying dependencies or including its local path in errors.
 func ReadDocument(name string) ([]byte, error) {
+	return readDocument(name, false)
+}
+
+// ReadGoSourceChecksum permits an empty lock only for the explicit source profile.
+func ReadGoSourceChecksum(name string) ([]byte, error) {
+	return readDocument(name, true)
+}
+
+func readDocument(name string, allowEmpty bool) ([]byte, error) {
 	abs, err := filepath.Abs(name)
 	if err != nil {
 		return nil, errors.New("invalid document path")
@@ -82,7 +91,7 @@ func ReadDocument(name string) ([]byte, error) {
 	defer d.root.Close()
 	base := filepath.Base(abs)
 	before, err := d.root.Lstat(base)
-	if err != nil || !before.Mode().IsRegular() || before.Size() <= 0 || before.Size() > MaxDocumentBytes {
+	if err != nil || !before.Mode().IsRegular() || (!allowEmpty && before.Size() == 0) || before.Size() < 0 || before.Size() > MaxDocumentBytes {
 		return nil, errors.New("document is missing, nonregular or exceeds its byte limit")
 	}
 	f, err := openEntry(d.root, base, false)
@@ -107,6 +116,11 @@ func ReadDocument(name string) ([]byte, error) {
 }
 
 func inventory(d *directory, files map[string]File) (map[string]os.FileInfo, error) {
+	return inventoryWithMetadata(d, files, false)
+}
+
+// A source snapshot may exclude only its root Git metadata; it is never read.
+func inventoryWithMetadata(d *directory, files map[string]File, excludeGit bool) (map[string]os.FileInfo, error) {
 	dirs := map[string]bool{".": true}
 	for name := range files {
 		for prefix := path.Dir(name); prefix != "."; prefix = path.Dir(prefix) {
@@ -114,6 +128,9 @@ func inventory(d *directory, files map[string]File) (map[string]os.FileInfo, err
 		}
 	}
 	budget := len(dirs) + len(files)
+	if excludeGit {
+		budget++
+	}
 	observed := map[string]os.FileInfo{}
 	entriesRead := 0
 	var walk func(string) error
@@ -151,6 +168,12 @@ func inventory(d *directory, files map[string]File) (map[string]os.FileInfo, err
 			info, err := d.root.Lstat(rel)
 			if err != nil || info.Mode()&os.ModeSymlink != 0 {
 				return errors.New("artifact entry is missing or linked")
+			}
+			if excludeGit && rel == ".git" {
+				if !info.IsDir() && (!info.Mode().IsRegular() || !singleLink(info)) {
+					return errors.New("source Git metadata has an unsafe type")
+				}
+				continue
 			}
 			if info.IsDir() {
 				if !dirs[rel] {

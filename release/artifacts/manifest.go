@@ -1,5 +1,7 @@
 // Package artifacts checks a bounded, explicitly selected release file set.
-// It does not authenticate provenance, execute a build or accept a release.
+// CheckProvenance additionally verifies selected signatures and exact workflow
+// identities using an independently pinned external verifier and trust root.
+// Neither mode executes a build or accepts a release.
 package artifacts
 
 import (

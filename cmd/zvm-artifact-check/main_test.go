@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -56,5 +57,37 @@ func TestHelpDoesNotProduceSuccess(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if err := run([]string{"-h"}, &stdout, &stderr); err != nil || stdout.Len() != 0 || !strings.Contains(stderr.String(), "Signatures") {
 		t.Fatalf("unexpected help: %v %q %q", err, stdout.String(), stderr.String())
+	}
+}
+
+func TestProvenanceOptionsRequireCompleteIndependentInputs(t *testing.T) {
+	base, err := filepath.Abs("../../release/artifacts/testdata/synthetic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	common := []string{"-manifest", filepath.Join(base, "manifest.json"), "-policy", filepath.Join(base, "policy.json"), "-directory", filepath.Join(base, "payloads")}
+	for _, option := range []string{"-provenance-policy", "-verifier", "-trusted-root", "-temporary-directory"} {
+		var stdout, stderr bytes.Buffer
+		err := run(append(append([]string{}, common...), option, "/private/not-for-output"), &stdout, &stderr)
+		if err == nil || !strings.Contains(err.Error(), "required together") || stdout.Len() != 0 || stderr.Len() != 0 || strings.Contains(err.Error(), "not-for-output") {
+			t.Fatal("partial provenance options were not refused privately")
+		}
+	}
+}
+
+func TestProvenanceFailureReturnsNoSuccessReceipt(t *testing.T) {
+	base, err := filepath.Abs("../../release/artifacts/testdata/synthetic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalid := filepath.Join(t.TempDir(), "provenance-policy.json")
+	if err := os.WriteFile(invalid, []byte("{}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	err = run([]string{"-manifest", filepath.Join(base, "manifest.json"), "-policy", filepath.Join(base, "policy.json"), "-directory", filepath.Join(base, "payloads"),
+		"-provenance-policy", invalid, "-verifier", "/private/not-for-output", "-trusted-root", "/private/not-for-output", "-temporary-directory", "/private/not-for-output"}, &stdout, &stderr)
+	if err == nil || stdout.Len() != 0 || stderr.Len() != 0 || strings.Contains(err.Error(), "not-for-output") {
+		t.Fatal("failed provenance verification produced a success receipt")
 	}
 }

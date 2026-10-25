@@ -59,5 +59,6 @@ do not publish a release or establish a running deployment.
 
 The standalone `go build ./cmd/zvm-artifact-check` command checks a dedicated
 artifact directory against an independent byte-selection policy. See the
-[artifact selection guide](release/artifacts/README.md). It keeps signature,
-SBOM-content and release acceptance unverified in its result.
+[artifact verification guide](release/artifacts/README.md) for its optional
+provenance mode, which adds a pinned local verifier/root and exact source/workflow
+policy. SBOM content, build reproduction and release acceptance remain unverified.

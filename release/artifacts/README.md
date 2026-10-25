@@ -1,9 +1,11 @@
 # Offline release artifact selection
 
 `zvm-artifact-check` checks the byte closure of an explicitly selected release
-package against an independently supplied policy. It does not build or execute
-the subjects, unpack archives, fetch inputs, verify signatures, analyze SBOM
-contents, authenticate a tag or accept a release.
+package against an independently supplied policy. Its default mode checks bytes.
+An optional mode adds actual signature and exact source/workflow verification
+through a pinned local GitHub CLI and local trust root. Neither mode builds or
+executes subjects, unpacks archives, analyzes SBOM contents, authenticates a tag
+or accepts a release.
 
 ```sh
 go build -o zvm-artifact-check ./cmd/zvm-artifact-check
@@ -18,7 +20,7 @@ are a runnable shape/byte vector. Its subject is plain fixture text, its
 provenance is unsigned and its SBOM is intentionally incomplete. Selection
 success for that vector proves none of those assertions.
 
-A successful receipt reports `selectionVerified: true` with exact counts and
+A successful default receipt reports `selectionVerified: true` with exact counts and
 document digests. `provenanceSignaturesVerified`, `sbomContentsVerified` and
 `releaseAccepted` remain false. Errors return no partial success receipt. Local
 input paths are excluded from command errors. Manifest SHA-256 hashes the exact
@@ -73,13 +75,115 @@ hash equality identifies the consumed bytes. It does not certify future paths,
 contents inside an archive or OCI layers, source honesty, license inventory,
 supported platforms, reproducible builds, signer authority or chain deployment.
 
+## Selected GitHub provenance verification
+
+Use all four additional options to enable `CheckProvenance`:
+
+```sh
+./zvm-artifact-check -manifest manifest.json -policy policy.json -directory selected \
+  -provenance-policy provenance-policy.json -verifier "$VERIFIER_PATH" \
+  -trusted-root trusted-root.jsonl -temporary-directory "$OWNED_SCRATCH"
+```
+
+The verifier path must be absolute, regular, executable and bounded, with exactly
+one filesystem link.
+Its exact SHA-256 and the local trust-root bytes must match the separately selected
+provenance policy. Tool paths are runtime inputs and never appear in receipts.
+The root must be one complete JSON record with a final LF. The process receives
+only explicit local bundle/root arguments and an isolated configuration/cache
+directory, with no inherited credentials or home configuration. It does not ask
+for authentication, run `trusted-root`, update TUF or acquire a bundle through the
+API. The caller must provision and authenticate both inputs and enforce runner
+network/host isolation independently. The implementation is not an OS sandbox.
+
+Provenance policy schema 1 has exactly these required members:
+
+```json
+{
+  "schema": 1,
+  "verifierSha256": "<independent verifier SHA-256>",
+  "trustedRootSha256": "<independent local root SHA-256>",
+  "sourceRef": "refs/tags/v0.1.0",
+  "signer": {
+    "repository": "Example/builders",
+    "workflowPath": ".github/workflows/release.yml",
+    "ref": "refs/heads/main",
+    "commit": "<exact signer commit>"
+  },
+  "artifacts": [{
+    "id": "linux-amd64",
+    "subjectName": "zvm-linux-amd64",
+    "digestAlgorithm": "sha256"
+  }]
+}
+```
+
+Replace every angle-bracket placeholder with an independently reviewed pin.
+The sorted artifact IDs must exactly cover the selection policy. SHA-256 and
+SHA-512 subjects are supported; SHA-512 is streamed together with SHA-256 to
+preserve the manifest binding. Each required sidecar must be exactly one JSON
+DSSE bundle. Concatenated records and collections are refused before invocation:
+an external verifier's success for a filtered subset cannot accept the package.
+Bundle and result JSON reject duplicate, escaped duplicate and case aliases.
+
+The verifier enforces the selected source repository/commit/ref, exact signer
+workflow SAN/commit, GitHub OIDC issuer, SLSA v1 predicate and hosted-runner policy.
+Its authenticated certificate must additionally match the source build-config
+URI and commit. A reusable signer's identity remains separate from the caller's
+source/config identity. The sole returned result must contain verified timestamp
+evidence, the exact subject name/digest and matching source/workflow/builder
+predicate assertions. Every required artifact must pass. The original observed
+file inventory is checked again after all invocations; no partial receipt survives
+a later failure or changed file set.
+
+Each child is bounded to 30 seconds, 1 MiB stdout and 64 KiB stderr. Output and
+diagnostics remain private; errors do not echo certificate contents or paths.
+Only small sidecars and the root are copied into the owned temporary directory.
+Subjects are not copied or extracted. The tool is hashed once, and its observed
+identity is held and checked through completion. As with selection, the caller
+must trust the local host and exclude hostile concurrent ownership changes.
+
+A successful provenance receipt sets `provenanceSignaturesVerified` and
+`workflowIdentityVerified` true and reports exact policy/tool/root hashes and an
+artifact count. It keeps `buildRecipeReproduced`, `sbomContentsVerified` and
+`releaseAccepted` false. Certificate extensions authenticate workflow/source
+identities; signed predicate fields remain assertions by that workflow. This
+does not independently verify tree/Gitlink/material completeness, recipe inputs,
+build flags, platform capability, SLSA level, reproducibility, current owner
+approval or the authority to publish a release.
+
+## Actual offline signature control
+
+Unit protocol controls use explicitly synthetic results and prove no cryptography.
+The opt-in `TestActualOfflineGitHubSignatureFixture` executes the real provisioned
+verifier against the public `sigstore-js-2.1.0` fixture, including source/ref/signer,
+changed subject and changed signature refusals. Without its inputs it is explicitly
+skipped. Ordinary source CI must not be presented as that external integration.
+
+Provision these files without extracting the subject, from
+[`cli/cli@55dbb4dc`](https://github.com/cli/cli/tree/55dbb4dc6b7edb10b48e3d7fc5bccd32318d1b55/pkg/cmd/attestation/test/data):
+
+| Local fixture name | Upstream fixture | SHA-256 |
+| --- | --- | --- |
+| `subject.tgz` | `sigstore-js-2.1.0.tgz` | `f0c641fce0310cb43208f4272dc1423153630e44ba8cdc0b5ce8466f724e0eed` |
+| `bundle.json` | `sigstore-js-2.1.0-bundle.json` | `cfadddd579b9fb45947530cd0e860986ec610a28f7fa6de3ef31cc051f07f761` |
+| `trusted-root.json` | `trusted_root.json` | `455b3fe53e2678889f093d66ebbfda5f12ebb9d682b146c3535fa04e97689787` |
+
+Set `ZVM_ATTESTATION_VERIFIER`, `ZVM_ATTESTATION_VERIFIER_SHA256` and
+`ZVM_ATTESTATION_FIXTURE_DIRECTORY` explicitly, then run `go test ./release/artifacts`.
+Tests perform no transport and require the fixed subject/bundle/root hashes before
+using them. The historical fixture trust policy applies only to this public
+control; it is neither a ZVM release nor an adopted ZVM signer/trust policy. Source
+interfaces were reviewed at GitHub CLI 2.97.0. A new verifier version or platform
+requires independently selected executable pins and fresh qualification.
+
 ## Remaining release work
 
-Connect a pinned supported provenance verifier to actual signed bundles and an
-independent workflow/repository/ref trust policy. Validate the selected SBOM
+Adopt an independently reviewed production verifier/root/workflow policy and
+qualify actual project bundles on supported verifier hosts. Validate the selected SBOM
 schema, generator inputs and subject/dependency coverage separately. Generate
 qualified platform outputs, immutable checksums/provenance/SBOMs and release
 notes from the selected candidate; independently verify the actual distribution.
 Protected tag/publication policy, owner signatures and chain-epoch/operator
-acceptance remain external gates. The current checker makes no network calls or
-publication changes and cannot grant those decisions.
+acceptance remain external gates. Neither mode makes publication changes or
+grants those decisions.

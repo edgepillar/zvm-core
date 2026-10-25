@@ -216,6 +216,12 @@ func Check(manifestBytes, policyBytes []byte, root string) (Result, error) {
 }
 
 func check(manifestBytes, policyBytes []byte, root string, afterOpen func(string)) (Result, error) {
+	return checkSelected(manifestBytes, policyBytes, root, afterOpen, nil)
+}
+
+// The extra verifier runs inside the same observed file inventory as selection.
+// A successful byte-only Check still reports no signature/content acceptance.
+func checkSelected(manifestBytes, policyBytes []byte, root string, afterOpen func(string), verify func(*directory, map[string]File, map[string]os.FileInfo) error) (Result, error) {
 	var m Manifest
 	var p Policy
 	if err := decode(manifestBytes, &m); err != nil {
@@ -258,6 +264,11 @@ func check(manifestBytes, policyBytes []byte, root string, afterOpen func(string
 			return Result{}, err
 		}
 		total += pin.Bytes
+	}
+	if verify != nil {
+		if err := verify(d, files, before); err != nil {
+			return Result{}, err
+		}
 	}
 	last, err := inventory(d, files)
 	if err != nil {

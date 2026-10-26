@@ -94,3 +94,8 @@ The standalone `go build ./cmd/zvm-source-check` command checks complete parent
 source exports, declared Gitlink entries and selected raw commit controls against
 an independent policy SHA-256. See the [source tree preflight](release/artifacts/SOURCE-TREES.md)
 for separate child-tree, compiler-use, artifact-composition and authority limits.
+
+The artifact checker also provides an explicit [parent contents mode](release/artifacts/PARENT-CONTENTS.md).
+It binds independently selected complete parent exports to contents and optional
+provenance while retaining source observations through final checks. Existing
+contents APIs retain their original parent-tree scope.

@@ -115,3 +115,21 @@ func TestContentsOptionsAndFailureDoNotProduceSuccess(t *testing.T) {
 		t.Fatal("failed content verification produced a success receipt")
 	}
 }
+
+func TestParentSourceOptionsRequireContentsAndPrivateInputs(t *testing.T) {
+	root, err := filepath.Abs("../../release/artifacts/testdata/synthetic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := []string{"-manifest", filepath.Join(root, "manifest.json"), "-policy", filepath.Join(root, "policy.json"), "-directory", filepath.Join(root, "payloads")}
+	for _, extra := range [][]string{
+		{"-parent-sources", "/private/no-export"},
+		{"-contents-policy", "/private/no-export", "-content-inputs", "/private/no-export", "-parent-sources", "/private/no-export"},
+	} {
+		var stdout, stderr bytes.Buffer
+		err := run(append(append([]string{}, base...), extra...), &stdout, &stderr)
+		if err == nil || stdout.Len() != 0 || strings.Contains(err.Error(), "no-export") {
+			t.Fatal("parent CLI accepted incomplete inputs, emitted success or exposed a runtime path")
+		}
+	}
+}

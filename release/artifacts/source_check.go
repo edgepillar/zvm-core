@@ -105,44 +105,66 @@ func (p GoSourceTreePolicy) validate() (GoLocalSource, error) {
 // child contents or a jointly verified artifact/attestation observation.
 func CheckGoSourceTree(raw []byte, expectedPolicySHA256 string, options GoSourceTreeOptions) (GoSourceTreeResult, error) {
 	var zero GoSourceTreeResult
+	observed, err := observeGoSourceTree(raw, expectedPolicySHA256, options)
+	if err != nil {
+		return zero, err
+	}
+	defer observed.close()
+	if err := observed.unchanged(); err != nil {
+		return zero, err
+	}
+	return observed.result, nil
+}
+
+type goSourceTreeObservation struct {
+	sourceObservation
+	policy GoSourceTreePolicy
+	result GoSourceTreeResult
+}
+
+func observeGoSourceTree(raw []byte, expectedPolicySHA256 string, options GoSourceTreeOptions) (*goSourceTreeObservation, error) {
 	if len(raw) == 0 || len(raw) > MaxDocumentBytes || !digest(expectedPolicySHA256, 64) || sum(raw) != expectedPolicySHA256 {
-		return zero, errors.New("source policy differs from the independently selected SHA-256")
+		return nil, errors.New("source policy differs from the independently selected SHA-256")
 	}
 	if options.Directory == "" || options.ControlDirectory == "" {
-		return zero, errors.New("explicit source export and commit controls are required")
+		return nil, errors.New("explicit source export and commit controls are required")
 	}
 	var p GoSourceTreePolicy
 	if err := decode(raw, &p); err != nil {
-		return zero, err
+		return nil, err
 	}
 	selected, err := p.validate()
 	if err != nil {
-		return zero, err
+		return nil, err
 	}
 	d, err := openDirectory(options.ControlDirectory)
 	if err != nil {
-		return zero, err
+		return nil, err
 	}
-	observation := &sourceObservation{control: &observedSource{dir: d, files: map[string]File{p.CommitObject.Path: p.CommitObject}}}
-	defer observation.close()
+	observation := &goSourceTreeObservation{policy: p, sourceObservation: sourceObservation{control: &observedSource{dir: d, files: map[string]File{p.CommitObject.Path: p.CommitObject}}}}
+	good := false
+	defer func() {
+		if !good {
+			observation.close()
+		}
+	}()
 	observation.control.before, err = inventory(d, observation.control.files)
 	if err != nil {
-		return zero, err
+		return nil, err
 	}
 	commitBytes, err := selectedControlDocument(d, p.CommitObject, observation.control.before[p.CommitObject.Path], true)
 	if err != nil {
-		return zero, err
+		return nil, err
 	}
 	tree, size, err := inspectSourceTree(selected, options.Directory, commitBytes)
 	if err != nil {
-		return zero, err
+		return nil, err
 	}
 	observation.trees = append(observation.trees, tree)
-	if err := observation.unchanged(); err != nil {
-		return zero, err
-	}
-	return GoSourceTreeResult{Schema: 1, Profile: GoSourceTreeProfile, PolicySHA256: expectedPolicySHA256,
+	observation.result = GoSourceTreeResult{Schema: 1, Profile: GoSourceTreeProfile, PolicySHA256: expectedPolicySHA256,
 		Repository: p.Source.Repository, Commit: p.Source.Commit, Tree: p.Source.Tree,
 		SourceTreeVerified: true, SourceFilesVerified: len(p.Files), SourceBytesVerified: size,
-		GitlinksBound: len(p.Source.Gitlinks), CommitObjectsVerified: 1}, nil
+		GitlinksBound: len(p.Source.Gitlinks), CommitObjectsVerified: 1}
+	good = true
+	return observation, nil
 }

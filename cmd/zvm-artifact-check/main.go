@@ -26,8 +26,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 	contentsPolicy := flags.String("contents-policy", "", "Independent complete SBOM-profile/control-file policy JSON")
 	controls := flags.String("content-inputs", "", "Dedicated exact SBOM control-file directory")
 	sources := flags.String("content-sources", "", "Private per-artifact local-source directory mapping JSON")
+	parents := flags.String("parent-sources", "", "Private per-artifact parent source policy/digest/directory mapping JSON")
 	flags.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zvm-artifact-check -manifest FILE -policy FILE -directory DIR\nSignatures require all of: -provenance-policy FILE -verifier FILE -trusted-root FILE -temporary-directory DIR\nSelected Go SBOM profiles require both: -contents-policy FILE -content-inputs DIR\nContents schema 2 local-source profiles also require: -content-sources FILE\nCombined mode verifies both inside the same file observation. Complete runtime/license coverage, build reproduction and release acceptance remain unverified.")
+		fmt.Fprintln(stderr, "Usage: zvm-artifact-check -manifest FILE -policy FILE -directory DIR\nSignatures require all of: -provenance-policy FILE -verifier FILE -trusted-root FILE -temporary-directory DIR\nSelected Go SBOM profiles require both: -contents-policy FILE -content-inputs DIR\nContents schema 2 local-source profiles also require: -content-sources FILE\nOptional complete parent source binding requires: -parent-sources FILE together with contents controls\nCombined mode verifies selected inputs inside the same file observation. Complete runtime/license coverage, compiler use, build reproduction and release acceptance remain unverified.")
 	}
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -62,6 +63,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if *sources != "" && *contentsPolicy == "" {
 		return errors.New("content sources require an independent contents policy and inputs")
 	}
+	if *parents != "" && *contentsPolicy == "" {
+		return errors.New("parent sources require an independent contents policy and inputs")
+	}
 	var contentOptions artifacts.ContentsOptions
 	if *sources != "" {
 		raw, readErr := artifacts.ReadDocument(*sources)
@@ -69,6 +73,17 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("content sources: %w", readErr)
 		}
 		contentOptions.SourceDirectories, err = artifacts.ParseContentsSourceDirectories(raw)
+		if err != nil {
+			return err
+		}
+	}
+	parentOptions := artifacts.ParentContentsOptions{ContentsOptions: contentOptions}
+	if *parents != "" {
+		raw, readErr := artifacts.ReadDocument(*parents)
+		if readErr != nil {
+			return fmt.Errorf("parent sources: %w", readErr)
+		}
+		parentOptions.Parents, err = artifacts.ReadParentSourceInputs(raw)
 		if err != nil {
 			return err
 		}
@@ -87,13 +102,17 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("provenance policy: %w", readErr)
 		}
 		options := artifacts.ProvenanceOptions{VerifierPath: *verifier, TrustedRootPath: *trustedRoot, TemporaryDirectory: *temporary}
-		if contents != nil && *sources != "" {
+		if contents != nil && *parents != "" {
+			result, err = artifacts.CheckBundleWithParentSources(context.Background(), m, p, v, contents, *directory, *controls, parentOptions, options)
+		} else if contents != nil && *sources != "" {
 			result, err = artifacts.CheckBundleWithOptions(context.Background(), m, p, v, contents, *directory, *controls, contentOptions, options)
 		} else if contents != nil {
 			result, err = artifacts.CheckBundle(context.Background(), m, p, v, contents, *directory, *controls, options)
 		} else {
 			result, err = artifacts.CheckProvenance(context.Background(), m, p, v, *directory, options)
 		}
+	} else if contents != nil && *parents != "" {
+		result, err = artifacts.CheckContentsWithParentSources(m, p, contents, *directory, *controls, parentOptions)
 	} else if contents != nil && *sources != "" {
 		result, err = artifacts.CheckContentsWithOptions(m, p, contents, *directory, *controls, contentOptions)
 	} else if contents != nil {

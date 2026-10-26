@@ -97,8 +97,10 @@ This standalone preflight is separate from the [Go SBOM profiles](SBOM.md),
 [local Core profile](LOCAL-SOURCES.md) and [contents composition](CONTENTS.md).
 Their formats and receipts retain their existing behavior. In particular, a
 separate source receipt does not change their `parentSourceTreeVerified` field
-or create a joint source/artifact/signature observation. Such composition needs
-an explicit independently reviewed consumer binding.
+or create a joint source/artifact/signature observation. The separate opt-in
+[parent contents consumer](PARENT-CONTENTS.md) binds independent parent policies
+to contents and optional provenance while keeping source observations open.
+Its adoption and release policy still require independent review.
 
 For the [recorded service cohorts](SERVICE-OUTPUTS.md), select each complete
 parent export and its exact Core Gitlink. Check Core's complete export separately

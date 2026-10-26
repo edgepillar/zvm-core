@@ -120,6 +120,13 @@ verified artifact profile; shared inputs can be checked for several artifacts.
 `sbomProfileScope` lists the sorted distinct selected profiles, comma-separated.
 No local-source or signature result survives a later failure.
 
+For independently selected complete parent exports, use the separate opt-in
+[parent contents consumer](PARENT-CONTENTS.md). It retains parent observations
+through contents and optional provenance, checks exact source and lock bindings
+and adds a parent-policy-set digest. It preserves these existing formats and
+their false parent-tree assertions; only the new opt-in results can establish
+the stated parent content binding.
+
 ## Result scope
 
 In contents mode, `sbomContentsVerified: true` means every named SBOM matched its

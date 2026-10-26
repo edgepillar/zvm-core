@@ -190,10 +190,20 @@ grants those decisions.
 
 ## Actual Relayer output qualification
 
-The [Darwin arm64 Relayer result](qualification/relayer-output-darwin-arm64.json)
+The [initial Darwin arm64 Relayer result](qualification/relayer-output-darwin-arm64.json)
 records one actual trimpath build, its selected Go/source SPDX check and three
 refusals using retained qualified tools. The profile counts 80 remote modules
-and one local Core module. It preserves the initial caller-count failure and
-its metadata-only reconciliation. This is a local output/profile observation;
-actual parent-contents composition, project provenance, independent reproduction,
-complete runtime/license coverage and release acceptance remain open.
+and one local Core module. That output/profile snapshot preserves its initial
+caller-count failure, metadata-only reconciliation and original scope.
+
+The [parent/source contents follow-up](qualification/relayer-parent-contents-darwin-arm64.json)
+reuses the same executable and SPDX bytes. It checks 23 Relayer files, the exact
+Core Gitlink, 112 Core files and 81 module records together. Repeat receipts
+match; four actual selection/content refusals emit no success output. The same
+88,730-byte SPDX document separately passes its pinned official schema and six
+malformed controls. No native rebuild or dependency download is needed.
+
+The follow-up uses an explicitly synthetic release/epoch/tag/workflow envelope.
+It establishes local byte/source consistency, with project provenance,
+independent reproduction, complete runtime/license coverage and release
+acceptance still open. Neither record distributes a binary or SPDX payload.

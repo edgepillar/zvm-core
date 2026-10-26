@@ -1,0 +1,221 @@
+{
+  "schema": 1,
+  "observedAt": "2026-10-26T07:00:11.929712+00:00",
+  "status": "LOCAL_ACTUAL_RELAYER_PARENT_CONTENTS_AND_SPDX_SCHEMA_CHECKED",
+  "scope": "Author-produced offline byte/source contents qualification for one actual Darwin arm64 Relayer output, under an explicitly synthetic release envelope. No project provenance or release acceptance.",
+  "initialOutputAndSourceProfile": {
+    "path": "relayer-output-darwin-arm64.json",
+    "revision": "a2c5f386ead2887037c669dcf94ff1b3d73b2ff5",
+    "sha256": "a73d5b058081ae16369fc030fba89ed29b998bcf4a8f9e3922e074392bfb5c66",
+    "originalScopeAndBytesPreserved": true
+  },
+  "subject": {
+    "path": "bin/zvm-relayer-darwin-arm64",
+    "bytes": 28329794,
+    "sha256": "7ba0379cbb14fd1b4cb88d1bbb2e82350a4c634a80b57436c9668bc3dc247e72"
+  },
+  "source": {
+    "repository": "Zenoglyphs-VM/zvm-relayer",
+    "commit": "5a72a223dd60d1ae4e974d420cadd85e6f9ee929",
+    "tree": "fc76ff2df52244fb94da3a406c380e6f510cace1",
+    "gitlinks": [
+      {
+        "path": "zvm-core",
+        "repository": "Zenoglyphs-VM/zvm-core",
+        "commit": "29e6d9b30be94de3772c850c7a1e9811585a8833"
+      }
+    ]
+  },
+  "coreSource": {
+    "repository": "Zenoglyphs-VM/zvm-core",
+    "commit": "29e6d9b30be94de3772c850c7a1e9811585a8833",
+    "tree": "86f8c8cb55fb298674a73242a928141eebc1dee6",
+    "gitlinks": []
+  },
+  "sourceSPDX": {
+    "profile": "spdx-2.3-go-local-source-v1",
+    "sha256": "90107c709d0fafc45ad237c8f3ab7ceada290cbf37d9dc435b060383525c9a0f",
+    "bytes": 88730,
+    "packages": 84,
+    "remoteModuleRecords": 80,
+    "localModuleRecords": 1,
+    "totalModuleRecordsVerified": 81
+  },
+  "qualifiedContentsChecker": {
+    "sha256": "6eb2a5a32904d60a26c00900d0a8eb3f13545fd2b9c365ccd899e2df5b1ff5cb",
+    "bytes": 5310450,
+    "sourceByteMatchRevision": "0551f58839ad9b4c544c773b6a8631c556da878a",
+    "rebuiltForThisObservation": false
+  },
+  "qualificationEnvelope": {
+    "actualSubjectSPDXAndSourceBytes": true,
+    "syntheticReleaseEpochTagAndWorkflow": true,
+    "authority": "Caller-selected local qualification context. Matching synthetic release fields establishes no project release, epoch, tag, workflow or signer authority.",
+    "projectReleaseManifestOrTagCreated": false,
+    "projectSignatureSelected": false,
+    "independentlySelectedParentPolicySha256": "24151fd15e48764727b4065852ffd96d12325da6d16d392a338d9330833d4a28",
+    "expectedParentPolicySetSha256": "3aa35826b84a5fd44ec03432f81e25b9701f752f4a8ac143ae3bf06d3df00002"
+  },
+  "contentsReceipt": {
+    "manifestSha256": "678a8e9ea74d161553a40f4e823a1d0873cb03813a9067bd98c509dc7e517e9c",
+    "policySha256": "21a58fa4074346f0d27221019bc36740541f94cd479079f24e2a5d092c380769",
+    "filesVerified": 5,
+    "bytesVerified": 28419050,
+    "selectionVerified": true,
+    "provenanceSignaturesVerified": false,
+    "sbomContentsVerified": true,
+    "releaseAccepted": false,
+    "contentsPolicySha256": "a89ad7e2611c57499a2bfda58960a8d5397c76cb23ff4ab87c3cb7962ab786f2",
+    "controlFilesVerified": 4,
+    "sbomProfilesVerified": 1,
+    "goModuleRecordsVerified": 81,
+    "sbomProfileScope": "spdx-2.3-go-local-source-v1",
+    "completeRuntimeInventoryEstablished": false,
+    "licenseCoverageEstablished": false,
+    "sourceCommitAuthenticated": false,
+    "toolchainIdentityAuthenticated": false,
+    "buildRecipeReproduced": false,
+    "localSourceTreesVerified": 1,
+    "localSourceFilesVerified": 112,
+    "localSourceBytesVerified": 1155787,
+    "localCommitObjectsVerified": 1,
+    "compilerUseOfTreesProven": false,
+    "parentSourceTreeVerified": true,
+    "parentSourceProfile": "git-go-parent-contents-v1",
+    "parentSourcePolicySetSha256": "3aa35826b84a5fd44ec03432f81e25b9701f752f4a8ac143ae3bf06d3df00002",
+    "parentSourcePoliciesVerified": 1,
+    "parentSourceTreesVerified": 1,
+    "parentSourceFilesVerified": 23,
+    "parentSourceBytesVerified": 170231,
+    "parentCommitObjectsVerified": 1,
+    "parentGitlinksBound": 1
+  },
+  "actualContentsCommands": [
+    {
+      "label": "actual Relayer parent/source contents",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "complete": true,
+      "successOutputBytes": 1248,
+      "seconds": 0.347
+    },
+    {
+      "label": "actual Relayer parent/source contents repeat",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "complete": true,
+      "successOutputBytes": 1248,
+      "seconds": 0.076
+    },
+    {
+      "label": "legacy actual Relayer source contents",
+      "expectedExit": 0,
+      "actualExit": 0,
+      "complete": true,
+      "successOutputBytes": 917,
+      "seconds": 0.065
+    },
+    {
+      "label": "wrong independent parent policy hash refusal",
+      "expectedExit": 1,
+      "actualExit": 1,
+      "complete": true,
+      "successOutputBytes": 0,
+      "seconds": 0.004
+    },
+    {
+      "label": "different valid Node parent refusal",
+      "expectedExit": 1,
+      "actualExit": 1,
+      "complete": true,
+      "successOutputBytes": 0,
+      "seconds": 0.022
+    },
+    {
+      "label": "unselected artifact parent refusal",
+      "expectedExit": 1,
+      "actualExit": 1,
+      "complete": true,
+      "successOutputBytes": 0,
+      "seconds": 0.005
+    },
+    {
+      "label": "altered SPDX with consistent file hashes refusal",
+      "expectedExit": 1,
+      "actualExit": 1,
+      "complete": true,
+      "successOutputBytes": 0,
+      "seconds": 0.058
+    }
+  ],
+  "repeatReceiptByteIdentical": true,
+  "legacyParentSourceTreeVerified": false,
+  "fourActualRefusalsEmittedNoSuccess": true,
+  "officialSPDXSchema": {
+    "schemaSha256": "4126dc29f15e92feec92e9622f4939131ad58b125d6f578aa93e980a6e6f3212",
+    "schemaGitBlob": "2dc11d1a34268227b63113d788b89efd75b5d2a8",
+    "documentSha256": "90107c709d0fafc45ad237c8f3ab7ceada290cbf37d9dc435b060383525c9a0f",
+    "receipt": {
+      "official_schema_positive_passed": true,
+      "official_schema_negative_controls_passed": 6,
+      "schema_valid_changed_subject_requires_semantic_profile_check": true,
+      "validator": "Ajv2019",
+      "version": "8.17.1",
+      "dialect": "https://json-schema.org/draft/2019-09/schema",
+      "schema_sha256": "4126dc29f15e92feec92e9622f4939131ad58b125d6f578aa93e980a6e6f3212",
+      "actual_document_sha256": "90107c709d0fafc45ad237c8f3ab7ceada290cbf37d9dc435b060383525c9a0f",
+      "network_disabled_by_parent_OS_policy": true
+    },
+    "nodeExecutableSha256": "dbedff294bab84a0a86c04e15fbcbeb1c97ca10bef1b32b0634cd24b36f62100",
+    "workerSha256": "5c236f5832b9edbd8b031ba1926c9fcdab271982ba26c039f4c45bb8928b1033",
+    "selectedPackageVersions": {
+      "ajv": "8.17.1",
+      "fast-deep-equal": "3.1.3",
+      "fast-uri": "3.0.1",
+      "json-schema-traverse": "1.0.0",
+      "require-from-string": "2.0.2"
+    },
+    "actualCommandExit": 0,
+    "actualCommandComplete": true,
+    "olderResultReusedForDifferentDocumentBytes": false
+  },
+  "retentionAndResources": {
+    "newNativeBuilds": 0,
+    "newDependencyDownloadsOrInstalls": 0,
+    "newSourceOrDependencyCacheTreeCopies": 0,
+    "serviceExecutions": 0,
+    "contentsCheckerExecutions": 7,
+    "officialSchemaWorkerExecutions": 1,
+    "temporaryValidatorJSJSONFiles": 171,
+    "temporaryValidatorUnpackedBytes": 478592,
+    "existingArchivesReusedWithSHA256AndSHA512": true,
+    "validatorInputsUnchangedDuringCommand": true,
+    "originalRegisteredSourceFilesUnchanged": true,
+    "originalFailureOutcomesPreserved": true,
+    "physicalAPFSReclaimMeasured": false
+  },
+  "authority": {
+    "parentSourceTreeContentsChecked": true,
+    "localCoreSourceTreeContentsChecked": true,
+    "sourceCommitAuthenticated": false,
+    "toolchainIdentityAuthenticated": false,
+    "compilerUseOfTreesProven": false,
+    "projectProvenanceSignaturesVerified": false,
+    "independentBuildReproduced": false,
+    "completeRuntimeInventoryEstablished": false,
+    "licenseCoverageEstablished": false,
+    "releaseAccepted": false,
+    "serviceExecuted": false,
+    "walletOrChainOperationExecuted": false,
+    "binaryOrSPDXDistributed": false
+  },
+  "limits": [
+    "The actual executable and SPDX bytes are bound to the complete selected Relayer and Core exports. The release/epoch/tag/workflow envelope is synthetic and is not an accepted project manifest.",
+    "Schema validation applies to the exact 88730-byte SPDX document identified here. A schema-valid changed subject still requires the independent semantic contents profile.",
+    "The retained checker source and its existing tests are unchanged. These seven consumer commands and one schema worker are not new executions of the broader Go normal/race suite.",
+    "This local author-produced result establishes no authenticated source/toolchain, compiler use, project attestation, independent reproduction, complete runtime/license coverage, maintainer/owner/operator acceptance or distribution.",
+    "Other services/platforms/containers and every original release acceptance criterion remain open. The earlier output/profile record and original failed records keep their original scope and outcomes."
+  ],
+  "fullD02AcceptanceComplete": false,
+  "productionGate": "NO_GO"
+}

@@ -1,0 +1,178 @@
+{
+  "schema": 1,
+  "observedAt": "2026-10-26T06:13:28.743687+00:00",
+  "status": "LOCAL_ACTUAL_RELAYER_OUTPUT_AND_GO_SOURCE_SPDX_PROFILE_CHECKED",
+  "scope": "One Darwin arm64 current-source Relayer build and offline local-Core/source SPDX profile; no service execution or accepted release.",
+  "source": {
+    "repository": "Zenoglyphs-VM/zvm-relayer",
+    "commit": "5a72a223dd60d1ae4e974d420cadd85e6f9ee929",
+    "tree": "fc76ff2df52244fb94da3a406c380e6f510cace1",
+    "gitlinks": [
+      {
+        "path": "zvm-core",
+        "repository": "Zenoglyphs-VM/zvm-core",
+        "commit": "29e6d9b30be94de3772c850c7a1e9811585a8833"
+      }
+    ]
+  },
+  "coreSource": {
+    "repository": "Zenoglyphs-VM/zvm-core",
+    "commit": "29e6d9b30be94de3772c850c7a1e9811585a8833",
+    "tree": "86f8c8cb55fb298674a73242a928141eebc1dee6",
+    "gitlinks": []
+  },
+  "subject": {
+    "path": "bin/zvm-relayer-darwin-arm64",
+    "bytes": 28329794,
+    "sha256": "7ba0379cbb14fd1b4cb88d1bbb2e82350a4c634a80b57436c9668bc3dc247e72"
+  },
+  "recipe": {
+    "goVersion": "go1.25.14",
+    "goFlags": [
+      "-p=1",
+      "-mod=readonly",
+      "-trimpath",
+      "-buildvcs=false"
+    ],
+    "linkerFlags": "-s -w",
+    "target": {
+      "GOOS": "darwin",
+      "GOARCH": "arm64",
+      "GOARM64": "v8.0",
+      "CGO_ENABLED": "0"
+    },
+    "recipeSha256": "2aa13d2e9ece1af8704f113dd46eb4ab8bf5161e0ce016c1e881a5f99e5ccdf9",
+    "buildExecutions": 1,
+    "buildSeconds": 32.876,
+    "maximumSubjectBytes": 67108864,
+    "mainPackage": "./cmd/zvm-relayer"
+  },
+  "lockedInputs": {
+    "goModSha256": "6b7bec484b3d52fc35e8353b719314edc6792987cd109a89d6595ea0934a6e32",
+    "goSumSha256": "101dbc3b560be6dbfc41538b136357e6dc5f9f4515595c44be444b96be427bf3",
+    "remoteModuleRecords": 80,
+    "localModuleRecords": 1,
+    "sourcePackageCount": 620,
+    "sourceGraphReexecuted": false
+  },
+  "sourceSPDX": {
+    "profile": "spdx-2.3-go-local-source-v1",
+    "sha256": "90107c709d0fafc45ad237c8f3ab7ceada290cbf37d9dc435b060383525c9a0f",
+    "bytes": 88730,
+    "packages": 84,
+    "totalModuleRecordsVerified": 81,
+    "localSourceFilesVerified": 112,
+    "localSourceBytesVerified": 1155787,
+    "localSourceTreesVerified": 1,
+    "localCommitObjectsVerified": 1,
+    "qualifiedToolSha256": "e641b2d87b26a333ed37921bdbb0168b9e1ace7454bb9e094413040724c7a2ad",
+    "qualifiedToolSourceRevision": "f83dd4bca9d6dba7f0a5e967e51ce6c4e0b2d7a5",
+    "byteMatchingCompiledToolSourceFiles": 17,
+    "creationTimeMetadata": {
+      "created": "2026-01-01T00:00:00Z",
+      "authority": "Caller-selected qualification metadata, not authenticated build or signing time."
+    },
+    "receipt": {
+      "profile": "spdx-2.3-go-local-source-v1",
+      "policySha256": "f460396c887b913774ccfc365b393b622110f36f0481869c017c609d9e0b01fb",
+      "sbomSha256": "90107c709d0fafc45ad237c8f3ab7ceada290cbf37d9dc435b060383525c9a0f",
+      "subjectSha256": "7ba0379cbb14fd1b4cb88d1bbb2e82350a4c634a80b57436c9668bc3dc247e72",
+      "modulesVerified": 81,
+      "spdxProfileVerified": true,
+      "subjectBytesVerified": true,
+      "goBuildInfoMatched": true,
+      "lockedModulesMatched": true,
+      "sourceCommitAuthenticated": false,
+      "toolchainIdentityAuthenticated": false,
+      "completeRuntimeInventoryEstablished": false,
+      "licenseCoverageEstablished": false,
+      "releaseAccepted": false,
+      "localSourceTreesVerified": 1,
+      "localSourceFilesVerified": 112,
+      "localSourceBytesVerified": 1155787,
+      "localCommitObjectsVerified": 1,
+      "compilerUseOfTreesProven": false,
+      "parentSourceTreeVerified": false
+    }
+  },
+  "actualCommands": {
+    "nativeBuild": {
+      "exit": 0,
+      "complete": true
+    },
+    "nativeSubjectMetadata": {
+      "exit": 0,
+      "complete": true
+    },
+    "SPDXGeneration": {
+      "exit": 0,
+      "complete": true
+    },
+    "SPDXCheck": {
+      "exit": 0,
+      "complete": true
+    },
+    "wrongMainPackage": {
+      "exit": 1,
+      "complete": true,
+      "successOutputBytes": 0
+    },
+    "wrongModuleChecksum": {
+      "exit": 1,
+      "complete": true,
+      "successOutputBytes": 0
+    },
+    "wrongLocalSourceTree": {
+      "exit": 1,
+      "complete": true,
+      "successOutputBytes": 0
+    }
+  },
+  "metadataReconciliation": {
+    "originalConsumerWorkerExit": 0,
+    "allFiveConsumerCommandsCompleted": true,
+    "callerAssertionInitiallyExpectedOnlyRemoteModuleCount": 80,
+    "correctContractIncludesLocalModule": true,
+    "originalFailedOwnerOutcomePreserved": "FAILURE",
+    "completedStreamsReconciledWithoutRerun": true,
+    "reconciliationTaskOutcome": "SUCCESS",
+    "qualifiedToolSourceParentDuringPreparation": "2eb44adcc438cc225a47b94ef29ba2581f6d35ed",
+    "sourceRevisionAboveMatchesCompiledSourceBytes": true
+  },
+  "retentionAndResources": {
+    "newDependencyDownloads": 0,
+    "sourceOrDependencyCacheTreeCopies": 0,
+    "parentCacheLogicalBytes": 1866735088,
+    "parentCacheMetadataAndActionPinsUnchanged": true,
+    "allParentCacheBlobBytesRehashed": false,
+    "moduleCacheMetadataPinsReused": 25689,
+    "moduleCacheContentFilesRehashedForMetadataChanges": 0,
+    "registeredSourceFilesReadOnly": 135,
+    "originalFailedBuildRecordPreserved": true,
+    "registeredSourceAndFallbackChanged": false,
+    "physicalAPFSReclaimMeasured": false
+  },
+  "authority": {
+    "sourceCommitAuthenticated": false,
+    "toolchainIdentityAuthenticated": false,
+    "compilerUseOfTreesProven": false,
+    "completeRuntimeInventoryEstablished": false,
+    "licenseCoverageEstablished": false,
+    "actualParentContentsCompositionChecked": false,
+    "projectAttestationVerified": false,
+    "independentBuildReproduced": false,
+    "releaseAccepted": false,
+    "serviceExecuted": false,
+    "walletOrChainOperationExecuted": false,
+    "binaryOrSPDXDistributed": false
+  },
+  "limits": [
+    "This is an author-produced local result for the declared source, recipe and platform. It does not establish maintainer, governance, custody, operator or release acceptance.",
+    "The SPDX profile checks selected Go build information, locked remote modules and one complete local Core source tree. OS/native/assets/licenses, authenticated toolchain/source, compiler use and independent reproduction remain separate.",
+    "Only local Core tree binding is covered by the source SPDX receipt. Actual Relayer parent-tree/content/provenance composition remains pending.",
+    "Initial closure-compatibility and caller-count assertion failures remain retained. Their original outcomes were not rewritten; completed native commands were not repeated for reconciliation.",
+    "Historical full and selected test totals are not relabelled as fresh tests for this output. Other D02 repositories/platforms and original roadmap acceptance remain open."
+  ],
+  "fullD02AcceptanceComplete": false,
+  "productionGate": "NO_GO"
+}

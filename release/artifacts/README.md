@@ -187,3 +187,13 @@ notes from the selected candidate; independently verify the actual distribution.
 Protected tag/publication policy, owner signatures and chain-epoch/operator
 acceptance remain external gates. Neither mode makes publication changes or
 grants those decisions.
+
+## Actual Relayer output qualification
+
+The [Darwin arm64 Relayer result](qualification/relayer-output-darwin-arm64.json)
+records one actual trimpath build, its selected Go/source SPDX check and three
+refusals using retained qualified tools. The profile counts 80 remote modules
+and one local Core module. It preserves the initial caller-count failure and
+its metadata-only reconciliation. This is a local output/profile observation;
+actual parent-contents composition, project provenance, independent reproduction,
+complete runtime/license coverage and release acceptance remain open.

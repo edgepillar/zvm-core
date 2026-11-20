@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -63,7 +64,35 @@ func (e *Engine) GetPayload(ctx context.Context, id engine.PayloadID) (*engine.E
 	if err := e.c.CallContext(ctx, &res, "engine_getPayloadV4", id); err != nil {
 		return nil, err
 	}
+	if err := bindEmptyWithdrawalsRoot(&res); err != nil {
+		return nil, err
+	}
 	return &res, nil
+}
+
+// bindEmptyWithdrawalsRoot restores the pinned op-geth encoder's omitted empty
+// MessagePasser storage root only if it reproduces the exact advertised block.
+// ZVM intentionally leaves that account's storage empty. No genesis state or
+// engine validation is changed; nonempty or unbound roots cannot be inferred.
+func bindEmptyWithdrawalsRoot(envelope *engine.ExecutionPayloadEnvelope) error {
+	if envelope.ExecutionPayload == nil {
+		return errors.New("missing execution payload")
+	}
+	if envelope.ExecutionPayload.WithdrawalsRoot != nil {
+		return nil
+	}
+	if envelope.ParentBeaconBlockRoot == nil {
+		return errors.New("cannot bind omitted withdrawals root without the parent beacon block root")
+	}
+	candidate := *envelope.ExecutionPayload
+	root := types.EmptyRootHash
+	candidate.WithdrawalsRoot = &root
+	if _, err := engine.ExecutableDataToBlock(candidate, []common.Hash{}, envelope.ParentBeaconBlockRoot,
+		envelope.Requests, types.IsthmusBlockConfig); err != nil {
+		return fmt.Errorf("cannot bind omitted withdrawals root to the advertised block hash: %w", err)
+	}
+	envelope.ExecutionPayload = &candidate
+	return nil
 }
 
 func (e *Engine) NewPayload(ctx context.Context, payload *engine.ExecutableData, beaconRoot common.Hash) (*engine.PayloadStatusV1, error) {

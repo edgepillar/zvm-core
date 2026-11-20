@@ -27,7 +27,9 @@ type runtimeFile struct {
 }
 
 type runtimeService struct {
+	Name       string        `json:"name,omitempty"`
 	Image      string        `json:"image"`
+	Replicas   int           `json:"replicas,omitempty"`
 	Executable string        `json:"executable"`
 	Files      []runtimeFile `json:"files"`
 }
@@ -43,6 +45,12 @@ type processPin struct {
 	mounted bool
 }
 
+type servicePins struct {
+	image    string
+	replicas int
+	files    []processPin
+}
+
 func configFileKind(kind string) bool {
 	switch kind {
 	case "config", "rollup", "l1-genesis", "l2-genesis", "deployments":
@@ -52,7 +60,7 @@ func configFileKind(kind string) bool {
 	}
 }
 
-func (m Manifest) runtimePins(directory, imageID string) (string, []processPin, error) {
+func (m Manifest) runtimeServices(directory string) (string, map[string]servicePins, error) {
 	files := make(map[string]File, len(m.Files))
 	for _, file := range m.Files {
 		files[file.ID] = file
@@ -78,12 +86,24 @@ func (m Manifest) runtimePins(directory, imageID string) (string, []processPin, 
 	for _, image := range m.Images {
 		images[image.ID] = true
 	}
-	var selected []processPin
+	services := make(map[string]servicePins, len(policy.Services))
+	var instances int
 	for _, service := range policy.Services {
-		if !images[service.Image] {
-			return "", nil, errors.New("runtime process policy requires unique signed image IDs")
+		name := service.Name
+		if name == "" {
+			name = service.Image
 		}
-		delete(images, service.Image)
+		if !identifier.MatchString(name) || services[name].files != nil || !images[service.Image] {
+			return "", nil, errors.New("runtime process policy requires unique service names and signed image IDs")
+		}
+		replicas := service.Replicas
+		if replicas == 0 {
+			replicas = 1
+		}
+		if replicas < 0 || replicas > MaxEntries-instances {
+			return "", nil, errors.New("runtime process policy exceeds the running container limit")
+		}
+		instances += replicas
 		executable := files[service.Executable]
 		if executable.Kind != "artifact" || executable.Bytes <= 0 || service.Files == nil {
 			return "", nil, errors.New("runtime process policy requires a signed executable and a file list")
@@ -104,14 +124,29 @@ func (m Manifest) runtimePins(directory, imageID string) (string, []processPin, 
 			}
 			bindings = append(bindings, processPin{file: file, path: path, mounted: binding.Mounted})
 		}
-		if service.Image == imageID {
-			selected = bindings
+		services[name] = servicePins{image: service.Image, replicas: replicas, files: bindings}
+	}
+	return pin.SHA256, services, nil
+}
+
+func (m Manifest) runtimePins(directory, imageID string) (string, []processPin, error) {
+	policy, services, err := m.runtimeServices(directory)
+	if err != nil {
+		return "", nil, err
+	}
+	var selected []processPin
+	for _, service := range services {
+		if service.image == imageID {
+			if selected != nil {
+				return "", nil, errors.New("several runtime services share the selected image")
+			}
+			selected = service.files
 		}
 	}
 	if len(selected) == 0 {
 		return "", nil, errors.New("runtime process policy does not include the selected image")
 	}
-	return pin.SHA256, selected, nil
+	return policy, selected, nil
 }
 
 // ObserveProcess checks the Docker init process and signed file paths on its host.
@@ -134,16 +169,25 @@ func (m Manifest) ObserveProcess(parent context.Context, p Policy, s Signatures,
 	if err != nil {
 		return result, err
 	}
+	return observePinnedProcess(ctx, target, image, snapshot, policy, pins)
+}
+
+func confirmDockerProcess(ctx context.Context, target ImageTarget, image ImageObservation, snapshot dockerSnapshot) error {
+	current, err := observeDockerImage(ctx, target, image.PlatformManifest, image.ImageConfigDigest)
+	if err != nil || current != snapshot {
+		return errors.New("Docker changed the observed container during process verification")
+	}
+	return nil
+}
+
+func observePinnedProcess(ctx context.Context, target ImageTarget, image ImageObservation, snapshot dockerSnapshot, policy string, pins []processPin) (ProcessObservation, error) {
+	var result ProcessObservation
 	startedAt, err := time.Parse(time.RFC3339Nano, snapshot.StartedAt)
 	if err != nil || startedAt.IsZero() || snapshot.PID <= 0 {
 		return result, errors.New("Docker did not report a valid running process identity")
 	}
 	recheck := func() error {
-		current, err := observeDockerImage(ctx, target, image.PlatformManifest, image.ImageConfigDigest)
-		if err != nil || current != snapshot {
-			return errors.New("Docker changed the observed container during process verification")
-		}
-		return nil
+		return confirmDockerProcess(ctx, target, image, snapshot)
 	}
 	if err := verifyProcessFiles(ctx, snapshot, pins, recheck); err != nil {
 		return result, err

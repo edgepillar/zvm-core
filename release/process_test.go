@@ -9,6 +9,16 @@ import (
 	"testing"
 )
 
+func addProcessFixturePin(f *fixture, id, kind string, raw []byte) File {
+	pin := File{
+		ID: id, Kind: kind, Repository: "zvm-core", Path: id + ".fixture",
+		Bytes: int64(len(raw)), SHA256: digest(raw),
+	}
+	f.manifest.Files = append(f.manifest.Files, pin)
+	f.policy.Files = append(f.policy.Files, FileRequirement{ID: pin.ID, Kind: pin.Kind, Repository: pin.Repository, Path: pin.Path})
+	return pin
+}
+
 func checkProcessFixture(t *testing.T, f *fixture, target ImageTarget, executable, configuration []byte, configPath string) {
 	t.Helper()
 	const exeID, configID = "fixture-executable", "fixture-process-config"
@@ -29,12 +39,7 @@ func checkProcessFixture(t *testing.T, f *fixture, target ImageTarget, executabl
 		{configID, "config", configuration},
 		{runtimeProcessPolicyID, "config", policy},
 	} {
-		pin := File{
-			ID: input.id, Kind: input.kind, Repository: "zvm-core", Path: input.id + ".fixture",
-			Bytes: int64(len(input.raw)), SHA256: digest(input.raw),
-		}
-		f.manifest.Files = append(f.manifest.Files, pin)
-		f.policy.Files = append(f.policy.Files, FileRequirement{ID: pin.ID, Kind: pin.Kind, Repository: pin.Repository, Path: pin.Path})
+		pin := addProcessFixturePin(f, input.id, input.kind, input.raw)
 		if input.id == runtimeProcessPolicyID {
 			if err := os.WriteFile(filepath.Join(f.files, pin.Repository, pin.Path), input.raw, 0600); err != nil {
 				t.Fatal(err)
@@ -94,6 +99,11 @@ func checkProcessFixture(t *testing.T, f *fixture, target ImageTarget, executabl
 		}
 	})
 	t.Run("mount changes after hashing", func(t *testing.T) {
+		t.Cleanup(func() {
+			if err := os.WriteFile(configPath, configuration, 0600); err != nil {
+				t.Error(err)
+			}
+		})
 		_, pins, err := f.manifest.runtimePins(f.files, target.ImageID)
 		if err != nil {
 			t.Fatal(err)

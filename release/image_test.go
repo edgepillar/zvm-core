@@ -201,6 +201,25 @@ func fixtureDocker(t *testing.T, input []byte, args ...string) string {
 	return strings.TrimSpace(string(raw))
 }
 
+func startFixtureContainer(t *testing.T, tag, configPath, project, service string) string {
+	t.Helper()
+	container := fixtureDocker(t, nil, "container", "run", "--detach", "--rm", "--pull=never",
+		"--network=none", "--read-only", "--cap-drop=ALL", "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
+		"--label", "com.docker.compose.project="+project, "--label", "com.docker.compose.service="+service,
+		"--mount", "type=bind,source="+configPath+",target=/observer-config,readonly", tag)
+	if !hash(container, 64) {
+		t.Fatal("Docker did not return the full fixture container ID")
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := exec.CommandContext(ctx, "docker", "--context", "default", "container", "stop", "--time", "1", container).Run(); err != nil {
+			t.Error("the owned Docker fixture could not be stopped")
+		}
+	})
+	return container
+}
+
 func TestReleaseImageObservationAgainstDockerEngine(t *testing.T) {
 	if os.Getenv("ZVM_TEST_DOCKER_IMAGE") != "1" {
 		t.Skip("requires the isolated Docker CI lane")
@@ -252,19 +271,8 @@ func TestReleaseImageObservationAgainstDockerEngine(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixtureDocker(t, archive, "image", "load", "--quiet")
-	container := fixtureDocker(t, nil, "container", "run", "--detach", "--rm", "--pull=never",
-		"--network=none", "--read-only", "--cap-drop=ALL", "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
-		"--mount", "type=bind,source="+configPath+",target=/observer-config,readonly", tag)
-	if !hash(container, 64) {
-		t.Fatal("Docker did not return the full fixture container ID")
-	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := exec.CommandContext(ctx, "docker", "--context", "default", "container", "stop", "--time", "1", container).Run(); err != nil {
-			t.Error("the owned Docker fixture could not be stopped")
-		}
-	})
+	project := fmt.Sprintf("zvm-release-fixture-%d", os.Getpid())
+	container := startFixtureContainer(t, tag, configPath, project, "primary")
 	f := newFixture(t)
 	image := &f.manifest.Images[0]
 	image.Platform = "linux/" + runtime.GOARCH
@@ -306,5 +314,8 @@ func TestReleaseImageObservationAgainstDockerEngine(t *testing.T) {
 	image.Reference = "registry.invalid/fixture/engine@" + manifest.Digest
 	t.Run("process and mounted configuration", func(t *testing.T) {
 		checkProcessFixture(t, f, target, executable, mountedConfig, configPath)
+	})
+	t.Run("signed running service inventory", func(t *testing.T) {
+		checkServicesFixture(t, *image, tag, project, root, executable, mountedConfig)
 	})
 }

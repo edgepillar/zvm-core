@@ -184,6 +184,8 @@ type dockerSnapshot struct {
 	Manifest  string `json:"manifest"`
 	PID       int    `json:"pid"`
 	StartedAt string `json:"startedAt"`
+	Project   string `json:"project"`
+	Service   string `json:"service"`
 }
 
 func observeDockerImage(parent context.Context, target ImageTarget, platform, config string) (dockerSnapshot, error) {
@@ -191,7 +193,11 @@ func observeDockerImage(parent context.Context, target ImageTarget, platform, co
 	defer cancel()
 	// Use the JSON field names across Docker API versions. The selected image
 	// descriptor is optional on engines with the classic image store.
-	const projected = `{"id":{{json (index . "Id")}},"image":{{json (index . "Image")}},"status":{{json (index (index . "State") "Status")}},"running":{{json (index (index . "State") "Running")}},"manifest":{{with index . "ImageManifestDescriptor"}}{{json (index . "digest")}}{{else}}""{{end}},"pid":{{json (index (index . "State") "Pid")}},"startedAt":{{json (index (index . "State") "StartedAt")}}}`
+	const projected = `{"id":{{json (index . "Id")}},"image":{{json (index . "Image")}},"status":{{json (index (index . "State") "Status")}},"running":{{json (index (index . "State") "Running")}},
+		"manifest":{{with index . "ImageManifestDescriptor"}}{{json (index . "digest")}}{{else}}""{{end}},
+		"pid":{{json (index (index . "State") "Pid")}},"startedAt":{{json (index (index . "State") "StartedAt")}},
+		"project":{{with index (index . "Config") "Labels"}}{{with index . "com.docker.compose.project"}}{{json .}}{{else}}""{{end}}{{else}}""{{end}},
+		"service":{{with index (index . "Config") "Labels"}}{{with index . "com.docker.compose.service"}}{{json .}}{{else}}""{{end}}{{else}}""{{end}}}`
 	cmd := exec.CommandContext(ctx, "docker", "--context", target.DockerContext, "container", "inspect",
 		"--format", projected, "--", target.ContainerID)
 	cmd.WaitDelay = time.Second
@@ -232,37 +238,52 @@ func (m Manifest) ObserveImage(ctx context.Context, p Policy, s Signatures, k Tr
 }
 
 func (m Manifest) observeImage(ctx context.Context, count int, target ImageTarget) (ImageObservation, dockerSnapshot, error) {
-	var result ImageObservation
-	index := slices.IndexFunc(m.Images, func(image Image) bool { return image.ID == target.ImageID })
-	if index < 0 || !hash(target.ContainerID, 64) || target.DockerContext == "" || target.OCIRoot == "" {
-		return result, dockerSnapshot{}, errors.New("signed image ID, full container ID, Docker context and OCI root are required")
-	}
-	root, err := openDirectory(target.OCIRoot)
+	expected, err := m.expectedImage(count, target.ImageID, target.OCIRoot)
 	if err != nil {
-		return result, dockerSnapshot{}, err
+		return ImageObservation{}, dockerSnapshot{}, err
+	}
+	return observeExpectedImage(ctx, target, expected)
+}
+
+func (m Manifest) expectedImage(count int, id, directory string) (ImageObservation, error) {
+	var result ImageObservation
+	index := slices.IndexFunc(m.Images, func(image Image) bool { return image.ID == id })
+	if index < 0 || directory == "" {
+		return result, errors.New("signed image ID and OCI root are required")
+	}
+	root, err := openDirectory(directory)
+	if err != nil {
+		return result, err
 	}
 	defer root.Close()
 	image := m.Images[index]
 	reference, platformManifest, config, err := resolveOCIImage(root, image)
 	if err != nil {
-		return result, dockerSnapshot{}, err
+		return result, err
 	}
 	manifest, err := m.Fingerprint()
 	if err != nil {
-		return result, dockerSnapshot{}, err
+		return result, err
 	}
 	epoch, err := m.EpochFingerprint()
 	if err != nil {
-		return result, dockerSnapshot{}, err
-	}
-	observed, err := observeDockerImage(ctx, target, platformManifest, config)
-	if err != nil {
-		return result, dockerSnapshot{}, err
+		return result, err
 	}
 	return ImageObservation{
 		ManifestSHA256: manifest, EpochSHA256: epoch, TrustedSignatures: count,
 		ImageID: image.ID, Platform: image.Platform, ReferenceDigest: reference,
 		PlatformManifest: platformManifest, ImageConfigDigest: config,
-		ObservedPlatformManifest: observed.Manifest, ContainerRunning: true,
-	}, observed, nil
+	}, nil
+}
+
+func observeExpectedImage(ctx context.Context, target ImageTarget, expected ImageObservation) (ImageObservation, dockerSnapshot, error) {
+	if !hash(target.ContainerID, 64) || target.DockerContext == "" {
+		return ImageObservation{}, dockerSnapshot{}, errors.New("full container ID and Docker context are required")
+	}
+	observed, err := observeDockerImage(ctx, target, expected.PlatformManifest, expected.ImageConfigDigest)
+	if err != nil {
+		return ImageObservation{}, dockerSnapshot{}, err
+	}
+	expected.ObservedPlatformManifest, expected.ContainerRunning = observed.Manifest, true
+	return expected, observed, nil
 }

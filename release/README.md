@@ -237,8 +237,8 @@ reviewed file inventory and the signed manifest. In this example, both
 }
 ```
 
-Each service names a unique signed image ID, an executable pin of kind
-`artifact`, and its list of configuration paths and file pins. A path with
+Each service names a signed image ID, an executable pin of kind `artifact`,
+and its list of configuration paths and file pins. A path with
 `mounted: true` must resolve on a separate mount from the process root.
 An empty list is explicit for a service with no additional file pins.
 
@@ -253,6 +253,36 @@ prevent a receipt. [Linux process root](https://man7.org/linux/man-pages/man5/pr
 The record covers the Docker init executable and selected files at observation
 time. Loaded application state, child executables and all required services
 need their own evidence.
+
+## Running Compose service inventory
+
+`release-observe-services` checks the signed process policy against the running
+containers in the chosen Compose project on the observer's Linux host.
+
+```sh
+zvm release-observe-services \
+  -manifest manifest.json -policy policy.json \
+  -signatures signatures.json -trusted-keys trusted-keys.json \
+  -project "$COMPOSE_PROJECT" -docker-context "$DOCKER_CONTEXT" \
+  -oci-root "$OCI_ROOT" -files-root release-inputs
+```
+
+Add `name` and `replicas` to the service entries in the signed process policy.
+`name` matches the Compose service label and must be unique. Multiple named
+services may reference the same signed image and select their own executable
+and file pins. An omitted name uses the image ID and an omitted replica count
+uses one. Review the complete required running inventory against the pinned
+deployment definition before signing. Completed one-shot jobs have a separate
+execution record. [Docker Compose service labels](https://docs.docker.com/reference/compose-file/services/#labels)
+
+The command checks the exact count for every role and refuses undeclared
+running roles in the selected project. It authenticates the release once,
+resolves each distinct OCI image once, and checks every container's image,
+init executable and signed file paths. It rechecks each Docker process
+snapshot and the project membership before returning the aggregate receipt.
+The receipt contains signed role names, digests and counts. Project names,
+container IDs and host configuration paths stay in the observer's environment.
+Each container's files are observed during its own checked interval.
 
 ## Saved contract build material
 

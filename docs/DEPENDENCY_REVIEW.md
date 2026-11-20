@@ -275,3 +275,28 @@ than exporting host paths or environment values. This is an installed-package
 observation, not a complete SBOM, image vulnerability scan, license acceptance,
 independent origin proof or release approval. APK repositories, signing keys
 and transitive package selection still require separate review and locking.
+
+## CLI image source notices
+
+The CLI Docker build collects Go source notices after building the binary in
+the same builder. The collector uses the verified module cache with network
+module resolution disabled. Its package selection uses the CLI's non-test
+imports under the Linux build profile and checks the nominal and effective
+module identities against the built binary's metadata. The Go SDK notice and
+the project's own license and notice are included.
+
+The image carries the selected notice bytes under
+`/usr/share/doc/zvm/notices`. The manifest records the SHA-256 of each
+source notice and embedded input. Identical notice payloads use one object.
+The collector comes from the reviewed zvm-node source. The pinned bloomfilter
+supplement matches the effective module and selected source bytes before it adds
+the original upstream notice.
+[Original collector source](https://github.com/Zenoglyphs-VM/zvm-node/tree/07c6edeedc1e4493da241868aa3a64f5313396cf/tools/noticebundle)
+
+CI reads the manifest from the exact built image. It compares the binary
+digest, Go lock digests and each notice object's size and digest. It also
+compares the embedded project files with the checked source. The image commands
+return manifest and digest metadata, so the report reuses the built binary and
+keeps the notice payloads in the image. The review of compiler intermediates,
+corresponding source, complete license obligations and Alpine notice text
+remains open.

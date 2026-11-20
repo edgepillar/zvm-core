@@ -12,5 +12,10 @@ keep the licence their upstream gives them.
 | `l2/predeploys/Create2Deployer_Arachnid.hex` | deterministic deployment proxy | Arachnid/deterministic-deployment-proxy |
 | `l2/predeploys/BeaconRoots_4788.hex`, `HistoryStorage_2935.hex` | EIP-4788 and EIP-2935 system contracts | the EIPs (CC0) |
 | `l2/predeploys/L1Block.hex`, `L2ToL1MessagePasser.hex` | OP Stack predeploys | ethereum-optimism/optimism (MIT) |
+| `tools/noticebundle/` | CLI source notice collector adapted from zvm-node | [MIT notice](tools/noticebundle/LICENSE.zvm-node) |
 
 `WrappedQSR.hex` and `ZVMBridge.hex` are this project's own.
+
+The CLI image includes the selected Go dependency and SDK notices under
+`/usr/share/doc/zvm/notices`. The manifest records their source scopes, object
+digests, linked module identities and the CLI binary digest.

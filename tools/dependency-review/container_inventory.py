@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 
+from container_notices import MANIFEST_COMMAND, MAX_INVENTORY, MAX_MANIFEST, PAYLOAD_COMMAND, payload_rows, verify_bundle
 from govulncheck_review import ReviewError, file_bytes, run_bounded, save, source_binding
 
 
@@ -30,20 +31,20 @@ def main():
         before = source_binding(args.source_commit)
         receipt["source"] = before
 
-        def run(label, argv):
+        def run(label, argv, stdout_limit=65536):
             nonlocal phase
             phase = label
             directory = args.output / label
             directory.mkdir()
             result = run_bounded(argv, directory, timeout=30,
-                                 stdout_limit=65536, stderr_limit=65536)
+                                 stdout_limit=stdout_limit, stderr_limit=65536)
             for name, pin in result["streams"].items():
                 (directory / pin["path"]).rename(directory / name)
                 pin["path"] = label + "/" + name
             receipt["commands"].append({"label": label, "process": result})
             if result["actualExit"] != 0 or not result["outputComplete"]:
                 raise ReviewError("image observation command did not complete")
-            return file_bytes(directory / "stdout", 65536)
+            return file_bytes(directory / "stdout", stdout_limit)
 
         template = ('{"id":{{json .Id}},"os":{{json .Os}},'
                     '"architecture":{{json .Architecture}},'
@@ -63,6 +64,12 @@ def main():
         digest = run("binary", common + ["--entrypoint=/bin/busybox", image["id"], "sha256sum", "/usr/local/bin/zvm"]).decode().split()
         if len(digest) != 2 or not re.fullmatch(r"[0-9a-f]{64}", digest[0]) or digest[1] != "/usr/local/bin/zvm":
             raise ReviewError("invalid CLI binary digest")
+        notice_command = common + ["--entrypoint=/bin/busybox", image["id"], "sh", "-ec"]
+        manifest = run("notice_manifest", notice_command + [MANIFEST_COMMAND], MAX_MANIFEST)
+        inventory = run("notice_objects", notice_command + [PAYLOAD_COMMAND], MAX_INVENTORY)
+        phase = "notice_binding"
+        notices = verify_bundle(manifest, payload_rows(inventory), image, before, digest[0], Path.cwd())
+        receipt["sourceNotices"] = notices
         phase = "source_after"
         if source_binding(args.source_commit) != before:
             raise ReviewError("source changed during image observation")
@@ -76,7 +83,7 @@ def main():
     if created:
         save(args.output / "inventory.json", receipt)
     print(json.dumps({"status": receipt["status"], "exit": result, "completeSBOM": False,
-                      "releaseAccepted": False}))
+                      "releaseAccepted": False, "sourceNotices": receipt.get("sourceNotices")}))
     return result
 
 

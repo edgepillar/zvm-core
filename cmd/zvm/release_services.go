@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	register("release-observe-services", "check the running Compose inventory against a signed release", func(args []string) error {
+	register("release-observe-services", "check signed Compose services and completed jobs", func(args []string) error {
 		return releaseObserveServices(args, os.Stdout)
 	})
 }

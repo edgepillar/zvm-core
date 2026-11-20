@@ -37,6 +37,7 @@ type runtimeService struct {
 type runtimeProcessPolicy struct {
 	Schema   int              `json:"schema"`
 	Services []runtimeService `json:"services"`
+	Jobs     []runtimeJob     `json:"jobs,omitempty"`
 }
 
 type processPin struct {
@@ -51,6 +52,12 @@ type servicePins struct {
 	files    []processPin
 }
 
+type runtimeInventory struct {
+	policySHA256 string
+	services     map[string]servicePins
+	jobs         map[string]runtimeJob
+}
+
 func configFileKind(kind string) bool {
 	switch kind {
 	case "config", "rollup", "l1-genesis", "l2-genesis", "deployments":
@@ -60,53 +67,53 @@ func configFileKind(kind string) bool {
 	}
 }
 
-func (m Manifest) runtimeServices(directory string) (string, map[string]servicePins, error) {
+func (m Manifest) runtimeInventory(directory string) (runtimeInventory, error) {
 	files := make(map[string]File, len(m.Files))
 	for _, file := range m.Files {
 		files[file.ID] = file
 	}
 	pin := files[runtimeProcessPolicyID]
 	if pin.Kind != "config" {
-		return "", nil, errors.New("a signed runtime process policy is required")
+		return runtimeInventory{}, errors.New("a signed runtime process policy is required")
 	}
 	root, err := openDirectory(directory)
 	if err != nil {
-		return "", nil, err
+		return runtimeInventory{}, err
 	}
 	defer root.Close()
 	raw, err := readPin(root, pin, MaxDocumentBytes)
 	if err != nil {
-		return "", nil, err
+		return runtimeInventory{}, err
 	}
 	var policy runtimeProcessPolicy
 	if decode(raw, &policy) != nil || policy.Schema != Schema || len(policy.Services) == 0 {
-		return "", nil, errors.New("signed runtime process policy is invalid")
+		return runtimeInventory{}, errors.New("signed runtime process policy is invalid")
 	}
 	images := make(map[string]bool, len(m.Images))
 	for _, image := range m.Images {
 		images[image.ID] = true
 	}
 	services := make(map[string]servicePins, len(policy.Services))
-	var instances int
+	instances := len(policy.Jobs)
 	for _, service := range policy.Services {
 		name := service.Name
 		if name == "" {
 			name = service.Image
 		}
 		if !identifier.MatchString(name) || services[name].files != nil || !images[service.Image] {
-			return "", nil, errors.New("runtime process policy requires unique service names and signed image IDs")
+			return runtimeInventory{}, errors.New("runtime process policy requires unique service names and signed image IDs")
 		}
 		replicas := service.Replicas
 		if replicas == 0 {
 			replicas = 1
 		}
 		if replicas < 0 || replicas > MaxEntries-instances {
-			return "", nil, errors.New("runtime process policy exceeds the running container limit")
+			return runtimeInventory{}, errors.New("runtime process policy exceeds the container limit")
 		}
 		instances += replicas
 		executable := files[service.Executable]
 		if executable.Kind != "artifact" || executable.Bytes <= 0 || service.Files == nil {
-			return "", nil, errors.New("runtime process policy requires a signed executable and a file list")
+			return runtimeInventory{}, errors.New("runtime process policy requires a signed executable and a file list")
 		}
 		bindings := []processPin{{file: executable}}
 		seen := make(map[string]bool, len(service.Files))
@@ -115,27 +122,35 @@ func (m Manifest) runtimeServices(directory string) (string, map[string]serviceP
 			path, absolute := strings.CutPrefix(binding.Path, "/")
 			file := files[binding.File]
 			if !absolute || !relative(path) || seen[path] || !configFileKind(file.Kind) {
-				return "", nil, errors.New("runtime process policy has an invalid file binding")
+				return runtimeInventory{}, errors.New("runtime process policy has an invalid file binding")
 			}
 			seen[path] = true
 			total += file.Bytes
 			if total > 4<<30 {
-				return "", nil, errors.New("runtime process file bindings exceed their byte budget")
+				return runtimeInventory{}, errors.New("runtime process file bindings exceed their byte budget")
 			}
 			bindings = append(bindings, processPin{file: file, path: path, mounted: binding.Mounted})
 		}
 		services[name] = servicePins{image: service.Image, replicas: replicas, files: bindings}
 	}
-	return pin.SHA256, services, nil
+	jobs := make(map[string]runtimeJob, len(policy.Jobs))
+	for _, job := range policy.Jobs {
+		if !identifier.MatchString(job.Name) || services[job.Name].files != nil || jobs[job.Name].Name != "" ||
+			!images[job.Image] || !hash(job.CommandSHA256, 64) {
+			return runtimeInventory{}, errors.New("runtime process policy requires unique job names, signed image IDs and command digests")
+		}
+		jobs[job.Name] = job
+	}
+	return runtimeInventory{policySHA256: pin.SHA256, services: services, jobs: jobs}, nil
 }
 
 func (m Manifest) runtimePins(directory, imageID string) (string, []processPin, error) {
-	policy, services, err := m.runtimeServices(directory)
+	inventory, err := m.runtimeInventory(directory)
 	if err != nil {
 		return "", nil, err
 	}
 	var selected []processPin
-	for _, service := range services {
+	for _, service := range inventory.services {
 		if service.image == imageID {
 			if selected != nil {
 				return "", nil, errors.New("several runtime services share the selected image")
@@ -146,7 +161,7 @@ func (m Manifest) runtimePins(directory, imageID string) (string, []processPin, 
 	if len(selected) == 0 {
 		return "", nil, errors.New("runtime process policy does not include the selected image")
 	}
-	return policy, selected, nil
+	return inventory.policySHA256, selected, nil
 }
 
 // ObserveProcess checks the Docker init process and signed file paths on its host.

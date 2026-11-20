@@ -254,10 +254,11 @@ The record covers the Docker init executable and selected files at observation
 time. Loaded application state, child executables and all required services
 need their own evidence.
 
-## Running Compose service inventory
+## Compose services and completed jobs
 
 `release-observe-services` checks the signed process policy against the running
-containers in the chosen Compose project on the observer's Linux host.
+containers and required completed jobs in the selected Compose project on the
+observer's Linux host.
 
 ```sh
 zvm release-observe-services \
@@ -272,8 +273,7 @@ Add `name` and `replicas` to the service entries in the signed process policy.
 services may reference the same signed image and select their own executable
 and file pins. An omitted name uses the image ID and an omitted replica count
 uses one. Review the complete required running inventory against the pinned
-deployment definition before signing. Completed one-shot jobs have a separate
-execution record. [Docker Compose service labels](https://docs.docker.com/reference/compose-file/services/#labels)
+deployment definition before signing. [Docker Compose service labels](https://docs.docker.com/reference/compose-file/services/#labels)
 
 The command checks the exact count for every role and refuses undeclared
 running roles in the selected project. It authenticates the release once,
@@ -283,6 +283,36 @@ snapshot and the project membership before returning the aggregate receipt.
 The receipt contains signed role names, digests and counts. Project names,
 container IDs and host configuration paths stay in the observer's environment.
 Each container's files are observed during its own checked interval.
+
+For a project with required one-shot jobs, add a `jobs` array alongside
+`services` in the signed process policy. A job name must be distinct from
+every running service name and match its Compose service label. The observer
+requires exactly one retained Compose service container per job. It checks
+successful exit, the signed image and the SHA-256 of Docker's configured
+executable and arguments. The digest input has a NUL byte after each element,
+including the last. For example, the digest for `["/bin/sh", "/genesis.sh"]`
+can be calculated with `printf '%s\0' /bin/sh /genesis.sh | sha256sum`.
+Keep secrets out of command arguments.
+
+```json
+{
+  "jobs": [
+    {
+      "name": "genesis",
+      "image": "core",
+      "commandSha256": "ba972779a0cfec14a9bdc02c346655cc9c4d58e7eb0c450a3e304519497fe36f"
+    }
+  ]
+}
+```
+
+The verifier rechecks every required job and the selected container inventory.
+It omits unrelated stopped roles and reports successful jobs separately from
+running counts. The receipt contains digests and exit codes. Container IDs,
+raw commands, start and finish times and environment values stay local. This
+checks Docker's latest retained invocation record. The files read by an exited
+process, historical invocations and the provenance of generated outputs
+require separate evidence.
 
 ## Saved contract build material
 

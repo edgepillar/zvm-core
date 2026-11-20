@@ -166,7 +166,23 @@ func compileImageFixture(t *testing.T) []byte {
 	t.Helper()
 	root := t.TempDir()
 	source, executable := filepath.Join(root, "main.go"), filepath.Join(root, "observer-fixture")
-	const program = "package main\nimport \"time\"\nfunc main() { time.Sleep(2 * time.Minute) }\n"
+	const program = `package main
+
+import (
+	"os"
+	"time"
+)
+
+func main() {
+	if len(os.Args) > 1 {
+		if os.Args[1] == "complete" {
+			return
+		}
+		os.Exit(1)
+	}
+	time.Sleep(2 * time.Minute)
+}
+`
 	if err := os.WriteFile(source, []byte(program), 0600); err != nil {
 		t.Fatal(err)
 	}

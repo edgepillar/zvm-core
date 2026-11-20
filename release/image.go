@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -188,25 +189,34 @@ type dockerSnapshot struct {
 	Service   string `json:"service"`
 }
 
-func observeDockerImage(parent context.Context, target ImageTarget, platform, config string) (dockerSnapshot, error) {
-	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
-	defer cancel()
-	// Use the JSON field names across Docker API versions. The selected image
-	// descriptor is optional on engines with the classic image store.
-	const projected = `{"id":{{json (index . "Id")}},"image":{{json (index . "Image")}},"status":{{json (index (index . "State") "Status")}},"running":{{json (index (index . "State") "Running")}},
+// Use the JSON field names across Docker API versions. The selected image
+// descriptor is optional on engines with the classic image store.
+const dockerImageProjection = `{"id":{{json (index . "Id")}},"image":{{json (index . "Image")}},"status":{{json (index (index . "State") "Status")}},"running":{{json (index (index . "State") "Running")}},
 		"manifest":{{with index . "ImageManifestDescriptor"}}{{json (index . "digest")}}{{else}}""{{end}},
 		"pid":{{json (index (index . "State") "Pid")}},"startedAt":{{json (index (index . "State") "StartedAt")}},
 		"project":{{with index (index . "Config") "Labels"}}{{with index . "com.docker.compose.project"}}{{json .}}{{else}}""{{end}}{{else}}""{{end}},
 		"service":{{with index (index . "Config") "Labels"}}{{with index . "com.docker.compose.service"}}{{json .}}{{else}}""{{end}}{{else}}""{{end}}}`
+
+func inspectDockerContainer(parent context.Context, target ImageTarget, projection string, limit int) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, "docker", "--context", target.DockerContext, "container", "inspect",
-		"--format", projected, "--", target.ContainerID)
+		"--format", projection, "--", target.ContainerID)
 	cmd.WaitDelay = time.Second
 	var output commandOutput
 	cmd.Stdout = &output
-	if cmd.Run() != nil || output.overflow || output.data.Len() > 1024 {
-		return dockerSnapshot{}, errors.New("Docker container observation was unavailable")
+	if cmd.Run() != nil || output.overflow || output.data.Len() > limit {
+		return nil, errors.New("Docker container observation was unavailable")
 	}
-	return checkDockerImage(output.data.Bytes(), target.ContainerID, platform, config)
+	return output.data.Bytes(), nil
+}
+
+func observeDockerImage(parent context.Context, target ImageTarget, platform, config string) (dockerSnapshot, error) {
+	raw, err := inspectDockerContainer(parent, target, dockerImageProjection, 1024)
+	if err != nil {
+		return dockerSnapshot{}, err
+	}
+	return checkDockerImage(raw, target.ContainerID, platform, config)
 }
 
 func checkDockerImage(raw []byte, container, platform, config string) (dockerSnapshot, error) {
@@ -214,16 +224,23 @@ func checkDockerImage(raw []byte, container, platform, config string) (dockerSna
 	if decode(raw, &observed) != nil || observed.ID != container || !observed.Running || observed.Status != "running" || !sha256Descriptor(observed.Image) {
 		return dockerSnapshot{}, errors.New("Docker did not report the selected container running with a valid image ID")
 	}
-	if observed.Manifest != "" {
-		if observed.Manifest != platform {
-			return dockerSnapshot{}, errors.New("running container manifest disagrees with the signed platform manifest")
-		}
-		return observed, nil
-	}
-	if observed.Image != config {
-		return dockerSnapshot{}, errors.New("running container image ID disagrees with the signed image configuration")
+	if err := matchDockerImage(observed, platform, config); err != nil {
+		return dockerSnapshot{}, fmt.Errorf("running %w", err)
 	}
 	return observed, nil
+}
+
+func matchDockerImage(observed dockerSnapshot, platform, config string) error {
+	if observed.Manifest != "" {
+		if observed.Manifest != platform {
+			return errors.New("container manifest disagrees with the signed platform manifest")
+		}
+		return nil
+	}
+	if observed.Image != config {
+		return errors.New("container image ID disagrees with the signed image configuration")
+	}
+	return nil
 }
 
 // ObserveImage authenticates the release before reading OCI blobs or inspecting

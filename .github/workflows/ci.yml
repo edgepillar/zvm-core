@@ -55,3 +55,4 @@ jobs:
         env:
           ZVM_TEST_NOM_GENESIS_VERIFIER: ${{ runner.temp }}/zvm-nom-genesis
           ZVM_TEST_NOM_DEVNET_GENESIS: ${{ runner.temp }}/zvm-l1-devnet/genesis.json
+          ZVM_TEST_DOCKER_IMAGE: "1"

@@ -170,6 +170,36 @@ agreement at those observed heights. Live epoch identity, finality and image
 and process identity require their own evidence. Each HTTP response is limited
 to 8 MiB and ten seconds and the observation has a two-minute deadline.
 
+## Docker image observations
+
+An observer can verify the image selected by a running Docker container
+against one signed release image. Provide the complete container ID from an
+independently selected Docker context and place the exact OCI JSON documents in
+`oci-root/blobs/sha256/<hex-digest>`.
+
+```sh
+zvm release-observe-image \
+  -manifest manifest.json -policy policy.json \
+  -signatures signatures.json -trusted-keys trusted-keys.json \
+  -image execution -container "$CONTAINER_ID" \
+  -docker-context "$DOCKER_CONTEXT" -oci-root "$OCI_ROOT"
+```
+
+The verifier authenticates the signed manifest before reading blobs. The
+reference may select an OCI or Docker v2 manifest, or an index with a unique
+direct image manifest descriptor for the signed platform. The verifier hashes
+the exact manifest and configuration bytes and checks descriptor sizes and
+platform metadata. It reads a small projection of `docker container inspect`
+and requires the running container's image ID to equal the configuration
+digest. The command uses previously supplied local blobs and one inspection.
+
+The record contains release, epoch and image digests and the signed platform.
+It omits container IDs, Docker contexts, local paths and environment values.
+The observation covers one container's image configuration at inspection time.
+Registry layer content, mounted files, the running process and complete service
+coverage require separate evidence. Each OCI document is limited to 4 MiB and
+the Docker observation has a ten-second deadline.
+
 ## Saved contract build material
 
 A release can declare an additional file with `id: "contract-build-policy"`,

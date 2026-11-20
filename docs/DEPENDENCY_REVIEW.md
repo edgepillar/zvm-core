@@ -282,6 +282,24 @@ revision. Release review still needs verification of the individual APK
 archives and the OCI publisher signature.
 [Published Alpine public key](https://alpinelinux.org/keys/alpine-devel%40lists.alpinelinux.org-6165ee59.rsa.pub)
 
+The offline APK verifier uses the reviewed repository key and the selected
+image catalog. It verifies the signature of a retained Alpine v2 repository
+index and matches installed package records. For each supplied APK, it checks
+its archive size, compressed control digest, signature, package metadata and
+compressed data hash. Run it from the reviewed checkout with OpenSSL on a
+POSIX host.
+
+```sh
+python3 -B tools/dependency-review/apk_repository.py \
+  --index /path/to/APKINDEX.tar.gz --key /path/to/publisher.rsa.pub \
+  --packages /path/to/apk-archives
+```
+
+The report counts authenticated index rows and verified package archives.
+Exit status zero requires an exact verified archive for every selected package.
+The command can report index coverage when the archive directory is omitted.
+[APK v2 format](https://github.com/alpinelinux/apk-tools/blob/master/doc/apk-v2.5.scd)
+
 ## Runtime base layer identity
 
 The CI job builds one local image using the Docker driver. The build writes its

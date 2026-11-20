@@ -1,6 +1,8 @@
+import json
+from pathlib import Path
 import unittest
 
-from apk_inventory import apk_licenses
+from apk_inventory import apk_licenses, load_repository_key, verify_image_repository_key
 from govulncheck_review import ReviewError
 
 
@@ -35,3 +37,24 @@ class ApkInventoryTests(unittest.TestCase):
                     stream(BUSYBOX + b"\n" + BUSYBOX, count=2)):
             with self.subTest(raw=raw), self.assertRaises(ReviewError):
                 apk_licenses(raw, ["busybox-1.37.0-r20"])
+
+    def test_repository_key_matches_a_pinned_recipe_and_image_output(self):
+        project = Path(__file__).resolve().parents[2]
+        catalog = json.loads((project / "LICENSES/alpine/sources.json").read_bytes())
+        expected = load_repository_key(project, catalog["installedPackages"])
+        digest = expected["pem"]["sha256"]
+        path = expected["imagePath"]
+        lines = f'{expected["pem"]["bytes"]}\n{digest}  {path}\n'
+        observed = verify_image_repository_key(lines.encode("ascii"), expected)
+        self.assertTrue(observed["publisherPEMMatchesImage"])
+        for wrong in (lines.replace(digest, "0" * 64), lines.replace(path, "/etc/apk/keys/other.rsa.pub"),
+                      lines.split("\n", 1)[1], lines + "extra\n"):
+            with self.subTest(output=wrong), self.assertRaisesRegex(ReviewError, "image differs"):
+                verify_image_repository_key(wrong.encode("ascii"), expected)
+
+    def test_repository_key_does_not_accept_a_different_installed_recipe(self):
+        project = Path(__file__).resolve().parents[2]
+        packages = json.loads((project / "LICENSES/alpine/sources.json").read_bytes())["installedPackages"]
+        changed = [{**row, "declaredBuildCommit": "0" * 40} if row["name"] == "alpine-keys" else row for row in packages]
+        with self.assertRaisesRegex(ReviewError, "key package differs"):
+            load_repository_key(project, changed)

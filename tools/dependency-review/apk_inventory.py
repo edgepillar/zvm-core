@@ -1,8 +1,12 @@
-"""Observe the Alpine package declarations and BusyBox HTTP client."""
+"""Observe Alpine package declarations, repository trust and the BusyBox HTTP client."""
 
+import json
 import re
+from urllib.parse import quote
 
-from govulncheck_review import ReviewError
+from apk_source_delivery import delivery_files
+from apk_source_index import DIGEST, SOURCE_INDEX, require
+from govulncheck_review import ReviewError, file_bytes, unique_object
 
 
 APK_DECLARATIONS_COMMAND = r"""
@@ -12,6 +16,15 @@ BEGIN { print "ZVM-APK-LICENSES-2" }
 /^[PVACLcoI]:/ || /^$/ { print }
 END { printf "END\t%d\n", count }
 ' /lib/apk/db/installed
+"""
+
+APK_REPOSITORY_KEY_COMMAND = r"""
+test -f "$1"
+size=$(/bin/busybox stat -L -c %s "$1")
+test "$size" -gt 0
+test "$size" -le 4096
+printf '%s\n' "$size"
+exec /bin/busybox sha256sum "$1"
 """
 
 WGET_PROBE_COMMAND = r"""
@@ -80,3 +93,38 @@ def apk_licenses(raw, installed):
     if {name + "-" + row["version"] for name, row in rows.items()} != set(installed):
         raise ReviewError("APK declarations differ from the installed package inventory")
     return [rows[name] for name in sorted(rows)]
+
+
+def load_repository_key(project, installed):
+    fixture = project / "tools/dependency-review/fixtures/alpine-runtime/repository-key.json"
+    pinned = json.loads(file_bytes(fixture, 4096), object_pairs_hook=unique_object)
+    name = pinned["filename"]
+    require(type(pinned["schema"]) is int and pinned["schema"] == 1
+            and re.fullmatch(r"alpine-devel@lists\.alpinelinux\.org-[0-9a-f]{8}\.rsa\.pub", name)
+            and pinned["publisherURL"] == "https://alpinelinux.org/keys/" + quote(name, safe="")
+            and DIGEST.fullmatch(pinned["spkiSHA256"]), "invalid Alpine repository key profile")
+    package = pinned["package"]
+    fields = ("name", "version", "architecture", "declaredBuildCommit")
+    candidates = [row for row in installed if row["name"] == "alpine-keys"]
+    require(len(candidates) == 1 and package == {key: candidates[0][key] for key in fields}
+            and package["architecture"] == "x86_64" and candidates[0]["origin"] == "alpine-keys",
+            "Alpine repository key package differs from the reviewed release")
+    notices = project / "LICENSES/alpine"
+    catalog = json.loads(file_bytes(notices / "sources.json", 128 << 10), object_pairs_hook=unique_object)
+    _, files = delivery_files(file_bytes(notices / SOURCE_INDEX, 128 << 10), catalog)
+    source = files.get(f"aports/main/alpine-keys/{name}")
+    pem = pinned["pem"]
+    require(source and pem == {key: source[key] for key in ("bytes", "sha256")}
+            and catalog["origins"]["alpine-keys"]["recipe"]["commit"] == package["declaredBuildCommit"]
+            and 0 < pem["bytes"] <= 4096, "Alpine repository key bytes differ from the pinned Aports source")
+    return {"imagePath": "/etc/apk/keys/" + name, "package": package, "publisherURL": pinned["publisherURL"],
+            "publisherSPKISHA256": pinned["spkiSHA256"], "pem": pem, "aportsGitBlob": source["gitBlob"]}
+
+
+def verify_image_repository_key(raw, expected):
+    lines = raw.decode("ascii").splitlines()
+    pem = expected["pem"]
+    require(raw.endswith(b"\n") and len(lines) == 2 and lines[0] == str(pem["bytes"])
+            and lines[1].split() == [pem["sha256"], expected["imagePath"]],
+            "Alpine repository key in the image differs from the publisher pin")
+    return {**expected, "publisherPEMMatchesImage": True}

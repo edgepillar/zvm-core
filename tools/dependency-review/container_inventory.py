@@ -9,7 +9,8 @@ import re
 import subprocess
 import sys
 
-from apk_inventory import APK_DECLARATIONS_COMMAND, WGET_PROBE_COMMAND, WGET_PROBE_RESULT, apk_licenses
+from apk_inventory import (APK_DECLARATIONS_COMMAND, APK_REPOSITORY_KEY_COMMAND, WGET_PROBE_COMMAND,
+                           WGET_PROBE_RESULT, apk_licenses, load_repository_key, verify_image_repository_key)
 from container_notices import MANIFEST_COMMAND, MAX_INVENTORY, MAX_MANIFEST, PAYLOAD_COMMAND, payload_rows, verify_bundle
 from govulncheck_review import ReviewError, file_bytes, run_bounded, save, source_binding
 from oci_runtime import MAX_BUILD_ID, verify_build_output, verify_runtime_base
@@ -102,6 +103,12 @@ def main():
         phase = "notice_binding"
         notices = verify_bundle(manifest, payload_rows(inventory), image, before, digest[0], Path.cwd(), installed)
         receipt["sourceNotices"] = notices
+        phase = "apk_repository_key_profile"
+        key = load_repository_key(Path.cwd(), installed)
+        observed_key = run("apk_repository_key", image_shell + [
+            APK_REPOSITORY_KEY_COMMAND, "apk-repository-key", key["imagePath"]], 1024)
+        phase = "apk_repository_key_binding"
+        receipt["apkRepositoryKey"] = verify_image_repository_key(observed_key, key)
         phase = "source_after"
         if source_binding(args.source_commit) != before:
             raise ReviewError("source changed during image observation")
@@ -122,7 +129,7 @@ def main():
     if not result:
         summary.update(image=receipt["image"], installedPackages=receipt["installedPackages"],
                        busyboxWget=receipt["busyboxWget"], buildOutput=receipt["buildOutput"],
-                       runtimeBase=receipt["runtimeBase"])
+                       runtimeBase=receipt["runtimeBase"], apkRepositoryKey=receipt["apkRepositoryKey"])
     if result:
         summary.update(failureStage=receipt["failureStage"], errorType=receipt["errorType"],
                        failureReason=receipt.get("failureReason"))

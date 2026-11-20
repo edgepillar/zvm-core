@@ -1,0 +1,16 @@
+{
+  "filename": "alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub",
+  "package": {
+    "architecture": "x86_64",
+    "declaredBuildCommit": "6d473fb38effb2389f567b29fb7eb27039b3a279",
+    "name": "alpine-keys",
+    "version": "2.5-r0"
+  },
+  "pem": {
+    "bytes": 800,
+    "sha256": "207e4696d3c05f7cb05966aee557307151f1f00217af4143c1bcaf33b8df733f"
+  },
+  "publisherURL": "https://alpinelinux.org/keys/alpine-devel%40lists.alpinelinux.org-6165ee59.rsa.pub",
+  "schema": 1,
+  "spkiSHA256": "8a70fc55f1a6fb2a392ad5a3e71aff82a637b2b33659c046f6b6a909bb5d1ab7"
+}

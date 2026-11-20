@@ -271,8 +271,16 @@ platform, entrypoint, user, reported size, root filesystem layer identities,
 installed package versions and CLI binary SHA-256. The package and binary
 commands use that immutable local image ID with networking disabled, a
 read-only filesystem and UID/GID 65534. The receipt records process exits,
-output completeness, stream digests and failures. APK repositories, signing
-keys, transitive package locking and distribution acceptance remain open.
+output completeness, stream digests and failures. Transitive package locking
+and distribution acceptance remain open.
+
+The APK repository key check reads the selected key in the same immutable
+image without network access. It compares the size and SHA-256 with Alpine's
+published PEM and the exact Aports source input for the installed
+`alpine-keys` package. The receipt identifies the key and the package
+revision. Release review still needs verification of the individual APK
+archives and the OCI publisher signature.
+[Published Alpine public key](https://alpinelinux.org/keys/alpine-devel%40lists.alpinelinux.org-6165ee59.rsa.pub)
 
 ## Runtime base layer identity
 

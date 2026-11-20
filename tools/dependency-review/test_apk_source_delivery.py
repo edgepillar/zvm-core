@@ -87,6 +87,27 @@ class AlpineSourceDeliveryTests(unittest.TestCase):
         with self.assertRaisesRegex(ReviewError, "post-install: selected payload is missing"):
             self.verify()
 
+    def test_schema_two_requires_packaging_file_pins_and_verifies_the_bytes(self):
+        index = json.loads(self.index)
+        index["schema"] = 2
+        self.index = json.dumps(index).encode()
+        self.catalog["buildSourceIndex"] = byte_pin(self.index)
+        with self.assertRaisesRegex(ReviewError, "packaging file pins differ"):
+            self.verify()
+
+        name = "example.post-install"
+        pinned = byte_pin(self.payloads[f"aports/main/example/{name}"])
+        index["origins"]["example"]["packagingFilePins"] = {name: pinned}
+        self.index = json.dumps(index).encode()
+        self.catalog["buildSourceIndex"] = byte_pin(self.index)
+        self.assertEqual(self.verify()["aportsFilesVerified"], 4)
+
+        pinned["sha256"] = "0" * 64
+        self.index = json.dumps(index).encode()
+        self.catalog["buildSourceIndex"] = byte_pin(self.index)
+        with self.assertRaisesRegex(ReviewError, r"post-install: Alpine source payload differs"):
+            self.verify()
+
     def test_changed_archive_local_patch_and_link_are_rejected(self):
         paths = ("sources/example/example.tar.gz", "aports/main/example/source.patch",
                  "aports/main/example/example.post-upgrade")

@@ -362,6 +362,8 @@ The build source index records the recipe inputs and their SHA-512 and SHA-256
 pins, plus the Git directories at the build commits recorded by APK. CI
 recomputes each directory's Git tree identity and checks local recipe file
 references, installation hooks and the baselayout upgrade link's target.
+The index pins the byte count and SHA-256 of each regular packaging hook
+from its exact Aports recipe commit.
 Notices from archives reference an exact recipe source. The index gives
 release reviewers the source locations for the recorded package selection.
 Complete corresponding-source delivery remains open.

@@ -17,6 +17,7 @@ KINDS = {"APORTS_SOURCE_FILE", "REMOTE_SOURCE_FILE", "SOURCE_ARCHIVE"}
 ARCHIVE_NOTICES = {"ARCHIVE_NOTICE_FILE", "ARCHIVE_INITIAL_SOURCE_NOTICE"}
 REGULAR_MODES = {0o100644, 0o100755}
 GIT_LINK = 0o120000
+MAX_APORTS_BLOB = 1 << 20
 
 
 def require(condition, message):
@@ -112,25 +113,37 @@ def checked_source_index(raw, catalog):
     require(0 < len(raw) <= 128 << 10 and pin == catalog["buildSourceIndex"],
             "APK source index differs from the catalog pin")
     data = json.loads(raw, object_pairs_hook=unique_object)
-    require(isinstance(data, dict) and data["schema"] == 1 and data["status"] == "APK_RECIPE_SOURCE_INDEX_REVIEW_REQUIRED"
+    require(isinstance(data, dict) and type(data["schema"]) is int and data["schema"] in (1, 2)
+            and data["status"] == "APK_RECIPE_SOURCE_INDEX_REVIEW_REQUIRED"
             and data["sourceInventory"] == catalog["sourceInventory"]
             and isinstance(data["origins"], dict)
             and data["origins"].keys() == catalog["origins"].keys(), "APK source index scope differs")
-    return pin["sha256"], data["origins"]
+    return pin["sha256"], data
 
 
-def checked_recipe(origin, index, catalog_entry):
+def checked_recipe(origin, index, catalog_entry, schema):
     entries = recipe_entries(index, catalog_entry["recipe"])
     sources, local = recipe_sources(index, origin, catalog_entry, entries)
     verify_notice_sources(catalog_entry["noticeCandidates"], sources)
-    return entries, sources, local
+    pins = {}
+    if schema == 2:
+        additional = entries.keys() - local.keys() - {"APKBUILD"}
+        regular = {name for name in additional if entries[name]["mode"] in REGULAR_MODES}
+        pins = index.get("packagingFilePins", {})
+        require(isinstance(pins, dict) and pins.keys() == regular, "APK packaging file pins differ from the recipe directory")
+        for pin in pins.values():
+            require(isinstance(pin, dict) and pin.keys() == {"bytes", "sha256"}
+                    and type(pin["bytes"]) is int and 0 < pin["bytes"] <= MAX_APORTS_BLOB
+                    and isinstance(pin["sha256"], str) and DIGEST.fullmatch(pin["sha256"]),
+                    "invalid APK packaging file byte pin")
+    return entries, sources, local, pins
 
 
 def verify_source_index(raw, catalog):
-    digest, origins = checked_source_index(raw, catalog)
+    digest, index = checked_source_index(raw, catalog)
     counts = {"recipeInputs": 0, "aportsTreeEntries": 0, "additionalPackagingEntries": 0, "gitLinks": 0}
     for origin, entry in catalog["origins"].items():
-        entries, sources, local = checked_recipe(origin, origins[origin], entry)
+        entries, sources, local, _ = checked_recipe(origin, index["origins"][origin], entry, index["schema"])
         counts["recipeInputs"] += len(sources)
         counts["aportsTreeEntries"] += len(entries)
         counts["additionalPackagingEntries"] += len(entries) - len(local) - 1

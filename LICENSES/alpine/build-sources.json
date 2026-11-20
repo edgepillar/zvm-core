@@ -14,6 +14,20 @@
       "sources": []
     },
     "alpine-baselayout": {
+      "packagingFilePins": {
+        "alpine-baselayout.post-install": {
+          "bytes": 453,
+          "sha256": "dd30b63bfbe4f7d8085f57840e15b84015b3518d6f282a3e0924f73a61000016"
+        },
+        "alpine-baselayout.pre-install": {
+          "bytes": 56,
+          "sha256": "28ecff91a36f438ca26bc8cc08d857863378aa94eab399a1f413e52501b86f85"
+        },
+        "alpine-baselayout.pre-upgrade": {
+          "bytes": 944,
+          "sha256": "3f35fa5402d397389f366e8934ba0f800a017a149f4281dc8c22762419e47e10"
+        }
+      },
       "recipeCommit": "540d8477019887cc6534152e92c3b12676e35d7b",
       "recipeDirectoryEntries": [
         {
@@ -511,6 +525,28 @@
       ]
     },
     "busybox": {
+      "packagingFilePins": {
+        "busybox-extras.post-install": {
+          "bytes": 79,
+          "sha256": "d9fc2353305920237a46b75c8b184166e6a2f9b6aaba5c96ed80d5234534141c"
+        },
+        "busybox-extras.pre-deinstall": {
+          "bytes": 195,
+          "sha256": "921289ece87e6a645d15dcd7fea4cd96e3c1a3ad393f7a98f6cad03bb7266aea"
+        },
+        "busybox.post-install": {
+          "bytes": 335,
+          "sha256": "13c120a1c714ecafa7fe1fc748406a89dfffc549118ebce324b53d4bbb4ba75f"
+        },
+        "busybox.post-upgrade": {
+          "bytes": 1432,
+          "sha256": "7a889f45d8e221698c18e315e38ea243cab0cc12935aa10f5e6adce2e4f3f991"
+        },
+        "busybox.trigger": {
+          "bytes": 568,
+          "sha256": "56be2f4b9f99be9fc281314cda5c5e3b45a8123e37ba4938f1405584ce1af443"
+        }
+      },
       "recipeCommit": "2e97d754a30d558f15524b8e422303c8a96832df",
       "recipeDirectoryEntries": [
         {
@@ -1557,6 +1593,16 @@
       ]
     },
     "ca-certificates": {
+      "packagingFilePins": {
+        "ca-certificates.post-deinstall": {
+          "bytes": 137,
+          "sha256": "9523860edc396093bd41270c6e33a569a30657e2ffd729829514ee6b6d54d652"
+        },
+        "ca-certificates.trigger": {
+          "bytes": 67,
+          "sha256": "1bf77c8eae3220b1bd7dd86561d0899315f51d72257c1aeb4066072ed4304fe5"
+        }
+      },
       "recipeCommit": "ce7bff87478cd936f5b7031ce822b02d4fdd313a",
       "recipeDirectoryEntries": [
         {
@@ -1945,7 +1991,7 @@
       ]
     }
   },
-  "schema": 1,
+  "schema": 2,
   "sourceInventory": {
     "commit": "07c6edeedc1e4493da241868aa3a64f5313396cf",
     "path": "LICENSES/apk/manifest.json",

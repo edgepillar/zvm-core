@@ -9,29 +9,28 @@ from pathlib import Path, PurePosixPath
 import stat
 import sys
 
-from apk_source_index import (DIGEST, GIT_LINK, SOURCE_INDEX, checked_recipe,
+from apk_source_index import (DIGEST, GIT_LINK, MAX_APORTS_BLOB, SOURCE_INDEX, checked_recipe,
                               checked_source_index, require, source_name)
 from govulncheck_review import ReviewError, file_bytes, unique_object
 
 
-MAX_GIT_BLOB = 1 << 20
 MAX_DELIVERY_BYTES = 128 << 20
 BLOCK_BYTES = 64 << 10
 
 
 def delivery_files(raw, catalog):
-    index_digest, origins = checked_source_index(raw, catalog)
+    index_digest, index = checked_source_index(raw, catalog)
     files = {}
-    for origin, scope in sorted(origins.items()):
+    for origin, scope in sorted(index["origins"].items()):
         require(source_name(origin), "invalid Alpine recipe origin")
         entry = catalog["origins"][origin]
-        entries, sources, local = checked_recipe(origin, scope, entry)
+        entries, sources, local, additional = checked_recipe(origin, scope, entry, index["schema"])
         recipe = entry["recipe"]
-        require(type(recipe["bytes"]) is int and 0 < recipe["bytes"] <= MAX_GIT_BLOB
+        require(type(recipe["bytes"]) is int and 0 < recipe["bytes"] <= MAX_APORTS_BLOB
                 and DIGEST.fullmatch(recipe["sha256"]), "invalid APKBUILD byte pin")
         for name, blob in sorted(entries.items()):
             path = f"aports/main/{origin}/{name}"
-            pinned = recipe if name == "APKBUILD" else local.get(name, {})
+            pinned = recipe if name == "APKBUILD" else local.get(name, additional.get(name, {}))
             files[path] = {
                 **{key: pinned[key] for key in ("bytes", "sha256", "sha512") if key in pinned},
                 "gitBlob": blob["oid"],
@@ -45,14 +44,14 @@ def delivery_files(raw, catalog):
             if source["kind"] != "APORTS_SOURCE_FILE":
                 files[f"sources/{origin}/{name}"] = {key: source[key] for key in ("bytes", "sha256", "sha512")}
     require(files and len({name.casefold() for name in files}) == len(files)
-            and sum(pin.get("bytes", MAX_GIT_BLOB) for pin in files.values()) <= MAX_DELIVERY_BYTES,
+            and sum(pin.get("bytes", MAX_APORTS_BLOB) for pin in files.values()) <= MAX_DELIVERY_BYTES,
             "Alpine delivery exceeds bounds or contains conflicting names")
     return index_digest, files
 
 
 def verify_payload(stream, count, pin):
     """Check one bounded payload at the current position of a binary stream."""
-    require(type(count) is int and 0 <= count <= pin.get("bytes", MAX_GIT_BLOB)
+    require(type(count) is int and 0 <= count <= pin.get("bytes", MAX_APORTS_BLOB)
             and count == pin.get("bytes", count), "Alpine source payload length differs")
     sha256, sha512 = hashlib.sha256(), hashlib.sha512()
     blob = hashlib.sha1(f"blob {count}\0".encode("ascii"))

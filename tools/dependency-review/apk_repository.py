@@ -1,4 +1,4 @@
-"""Verify a retained Alpine v2 repository index and the APKs selected by Core."""
+"""Verify retained Alpine v2 indexes and APKs selected by the Core image."""
 
 import argparse
 from base64 import b64encode
@@ -89,10 +89,14 @@ def signed_payload(raw, key_path):
     return signatures[expected], payload
 
 
-def verify_index(raw, pem, key):
-    require(0 < len(raw) <= INDEX_LIMIT, "APK repository index archive size is invalid")
+def verify_repository_key(pem, key):
     require(len(pem) == key["pem"]["bytes"] and sha256(pem).hexdigest() == key["pem"]["sha256"],
             "APK repository public key differs from the publisher pin")
+
+
+def verify_index(raw, pem, key):
+    require(0 < len(raw) <= INDEX_LIMIT, "APK repository index archive size is invalid")
+    verify_repository_key(pem, key)
     signature, compressed = signed_payload(raw, key["imagePath"])
     verify_rsa_signature(compressed, pem, signature)
     _, expanded, remainder = gzip_section(compressed, 16 << 20)
@@ -136,22 +140,37 @@ def apk_metadata(raw):
     return metadata
 
 
-def verify_package(raw, index_row, pem, key):
-    require(len(raw) == int(index_row["S"]) <= APK_LIMIT, "APK package size differs from the signed index")
+def verify_package(raw, expected, pem, key):
+    require(0 < len(raw) <= APK_LIMIT, "APK package size is outside the supported bounds")
     signature, payload = signed_payload(raw, key["imagePath"])
     control, raw_control, data = gzip_section(payload, CONTROL_LIMIT)
     identity = "Q1" + b64encode(sha1(control).digest()).decode("ascii")
-    require(identity == index_row["C"], "APK control digest differs from the signed index")
+    require(identity == expected["C"], "APK control digest differs from the expected package identity")
     verify_rsa_signature(control, pem, signature)
     members = tar_members(raw_control, 32, 128 << 10)
     require(".PKGINFO" in members, "APK package metadata is missing")
     metadata = apk_metadata(members[".PKGINFO"])
-    require(all(metadata[pkginfo] == index_row[field] for field, (_, pkginfo) in PACKAGE_FIELDS.items()),
-            "APK package metadata differs from the signed index")
+    require(all(metadata[pkginfo] == expected[field] for field, (_, pkginfo) in PACKAGE_FIELDS.items()),
+            "APK package metadata differs from the expected package identity")
     require(data.startswith(b"\x1f\x8b") and sha256(data).hexdigest() == metadata["datahash"],
             "APK data digest differs from the signed control metadata")
     return {"bytes": len(raw), "sha256": sha256(raw).hexdigest(), "controlIdentity": identity,
             "dataSHA256": metadata["datahash"], "signatureVerified": True}
+
+
+def review_archived_package(raw, pem, key, installed, name):
+    """Verify a publisher-signed APK against one package in the pinned image catalog."""
+    verify_repository_key(pem, key)
+    require(IDENTITY.fullmatch(name), "selected APK package has an invalid name")
+    selected = [package for package in installed if package["name"] == name]
+    require(len(selected) == 1, "selected package must appear exactly once in the image catalog")
+    package = selected[0]
+    expected = {field: str(package[source]) for field, (source, _) in PACKAGE_FIELDS.items()}
+    expected["C"] = package["installedChecksum"]
+    archive = verify_package(raw, expected, pem, key)
+    return {"name": name, "version": package["version"], "archive": archive, "archiveVerified": True,
+            "installedIdentityMatched": True, "indexSignatureVerified": False, "complete": False,
+            "repositoryKeyPEMSHA256": key["pem"]["sha256"]}
 
 
 def review_repository(raw, pem, key, installed, read_archive=None):
@@ -187,6 +206,7 @@ def review_repository(raw, pem, key, installed, read_archive=None):
             continue
         try:
             package_bytes = read_archive(f"{name}-{version}.apk", row["indexArchiveBytes"])
+            require(len(package_bytes) == row["indexArchiveBytes"], "APK package size differs from the signed index")
             row["archive"] = verify_package(package_bytes, signed, pem, key)
             row["archiveVerified"] = True
         except FileNotFoundError:
@@ -212,10 +232,19 @@ def review_repository(raw, pem, key, installed, read_archive=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--index", type=Path, required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--index", type=Path, help="retained repository index for the full image inventory")
+    mode.add_argument("--archive", help="retained APK for one installed package, or - for stdin")
     parser.add_argument("--key", required=True, help="reviewed public PEM file or - for stdin")
     parser.add_argument("--packages", type=Path, help="directory of exact package archives")
+    parser.add_argument("--installed-package", help="image catalog name for --archive")
     args = parser.parse_args()
+    if args.archive is not None and (args.installed_package is None or args.packages is not None):
+        parser.error("--archive requires --installed-package and excludes --packages")
+    if args.index is not None and args.installed_package is not None:
+        parser.error("--installed-package requires --archive")
+    if args.archive == args.key == "-":
+        parser.error("only one input can use stdin")
     try:
         project = Path.cwd()
         catalog_raw = file_bytes(project / "LICENSES/alpine/sources.json", 128 << 10)
@@ -223,25 +252,33 @@ def main():
         installed = catalog["installedPackages"]
         key = load_repository_key(project, installed)
         pem = sys.stdin.buffer.read(4097) if args.key == "-" else file_bytes(Path(args.key), 4096)
-        with ExitStack() as stack:
-            read_archive = None
-            if args.packages is not None:
-                fd = os.open(args.packages, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-                stack.callback(os.close, fd)
+        if args.archive is not None:
+            raw = (sys.stdin.buffer.read(APK_LIMIT + 1) if args.archive == "-"
+                   else file_bytes(Path(args.archive), APK_LIMIT))
+            report = review_archived_package(raw, pem, key, installed, args.installed_package)
+            result = 0
+        else:
+            with ExitStack() as stack:
+                read_archive = None
+                if args.packages is not None:
+                    fd = os.open(args.packages, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                    stack.callback(os.close, fd)
 
-                def read_archive(name, length):
-                    with open_directory_file(fd, name) as (stream, size):
-                        require(size == length, "APK package size differs from the signed index")
-                        return stream.read(length + 1)
+                    def read_archive(name, length):
+                        with open_directory_file(fd, name) as (stream, size):
+                            require(size == length, "APK package size differs from the signed index")
+                            return stream.read(length + 1)
 
-            report = review_repository(file_bytes(args.index, INDEX_LIMIT), pem, key, installed, read_archive)
+                report = review_repository(file_bytes(args.index, INDEX_LIMIT), pem, key, installed, read_archive)
+            result = 0 if report["complete"] else 2
         report["catalogSHA256"] = sha256(catalog_raw).hexdigest()
     except (ReviewError, OSError, ValueError, KeyError, TypeError, tarfile.TarError, zlib.error,
             subprocess.SubprocessError) as error:
         failure = str(error) if isinstance(error, ReviewError) else type(error).__name__
         report = {"complete": False, "error": failure}
+        result = 2
     print(json.dumps(report, sort_keys=True))
-    return 0 if report["complete"] else 2
+    return result
 
 
 if __name__ == "__main__":

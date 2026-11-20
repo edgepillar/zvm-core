@@ -6,7 +6,7 @@ import tarfile
 import unittest
 from unittest.mock import call, patch
 
-from apk_repository import PACKAGE_FIELDS, review_repository, verify_index
+from apk_repository import PACKAGE_FIELDS, review_archived_package, review_repository, verify_index
 from govulncheck_review import ReviewError
 
 
@@ -81,6 +81,15 @@ class ApkRepositoryTests(unittest.TestCase):
         self.assertIn("data digest differs", report["packages"][0]["archiveFailure"])
 
     @patch("apk_repository.verify_rsa_signature")
+    def test_index_mode_requires_the_signed_archive_size(self, verify):
+        report = review_repository(self.index, self.pem, self.key, [self.installed],
+                                   lambda name, size: self.apk[:-1])
+        self.assertEqual(report["indexRowsMatched"], 1)
+        self.assertFalse(report["complete"])
+        self.assertIn("size differs", report["packages"][0]["archiveFailure"])
+        verify.assert_called_once_with(self.compressed_index, self.pem, self.signature)
+
+    @patch("apk_repository.verify_rsa_signature")
     def test_archive_signature_failure_is_retained(self, verify):
         verify.side_effect = [None, ReviewError("APK repository RSA signature verification failed")]
         report = review_repository(self.index, self.pem, self.key, [self.installed],
@@ -95,3 +104,28 @@ class ApkRepositoryTests(unittest.TestCase):
         with self.assertRaisesRegex(ReviewError, "public key differs"):
             verify_index(self.index, self.pem + b"!", self.key)
         verify.assert_not_called()
+
+    @patch("apk_repository.verify_rsa_signature")
+    def test_archived_package_matches_installed_identity_without_an_index(self, verify):
+        report = review_archived_package(self.apk, self.pem, self.key, [self.installed], "example")
+        self.assertTrue(report["archiveVerified"])
+        self.assertTrue(report["installedIdentityMatched"])
+        self.assertFalse(report["indexSignatureVerified"])
+        self.assertFalse(report["complete"])
+        verify.assert_called_once_with(self.control, self.pem, self.signature)
+
+    @patch("apk_repository.verify_rsa_signature")
+    def test_archived_package_requires_the_exact_installed_checksum_and_publisher_key(self, verify):
+        changed = {**self.installed, "installedChecksum": "Q1" + "A" * 28}
+        with self.assertRaisesRegex(ReviewError, "control digest differs"):
+            review_archived_package(self.apk, self.pem, self.key, [changed], "example")
+        with self.assertRaisesRegex(ReviewError, "public key differs"):
+            review_archived_package(self.apk, self.pem + b"!", self.key, [self.installed], "example")
+        verify.assert_not_called()
+
+    @patch("apk_repository.verify_rsa_signature")
+    def test_archived_package_refuses_signature_failure(self, verify):
+        verify.side_effect = ReviewError("APK repository RSA signature verification failed")
+        with self.assertRaisesRegex(ReviewError, "signature verification failed"):
+            review_archived_package(self.apk, self.pem, self.key, [self.installed], "example")
+        verify.assert_called_once()

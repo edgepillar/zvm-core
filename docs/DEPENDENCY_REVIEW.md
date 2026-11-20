@@ -300,6 +300,22 @@ Exit status zero requires an exact verified archive for every selected package.
 The command can report index coverage when the archive directory is omitted.
 [APK v2 format](https://github.com/alpinelinux/apk-tools/blob/master/doc/apk-v2.5.scd)
 
+An older installed version may be available on Alpine's archived release media.
+Verify it with the retained APK and the reviewed image catalog.
+
+```sh
+python3 -B tools/dependency-review/apk_repository.py \
+  --archive /path/to/zlib-1.3.2-r1.apk --installed-package zlib \
+  --key /path/to/publisher.rsa.pub
+```
+
+This mode returns success for one package after verifying the publisher signature,
+the image-installed package identity and the compressed data digest. Use index
+mode to record full repository coverage. For piped input, use `--archive -` with
+a PEM file and retain the producer's exit status. Verify an archival medium's
+origin and signature separately.
+[Alpine archived release media](https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/x86_64/)
+
 ## Runtime base layer identity
 
 The CI job builds one local image using the Docker driver. The build writes its

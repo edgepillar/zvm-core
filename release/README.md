@@ -94,10 +94,11 @@ zvm release-verify \
 Build the helper in the independently reviewed go-zenon checkout used by the
 release. `CORE_SOURCE`, `NOM_SOURCE` and `VERIFIER` are absolute paths chosen by
 the verifier operator. The helper builds against go-zenon's existing module
-lock and runs independently of the Core binary.
+lock and runs independently of the Core binary. The build requires a C
+compiler for go-zenon's secp256k1 dependency.
 
 ```sh
-GOWORK=off go -C "$NOM_SOURCE" build -mod=readonly -trimpath \
+CGO_ENABLED=1 GOWORK=off go -C "$NOM_SOURCE" build -mod=readonly -trimpath \
   -o "$VERIFIER" "$CORE_SOURCE/tools/nom-genesis/main.go"
 ```
 

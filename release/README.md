@@ -170,6 +170,20 @@ agreement at those observed heights. Live epoch identity, finality and image
 and process identity require their own evidence. Each HTTP response is limited
 to 8 MiB and ten seconds and the observation has a two-minute deadline.
 
+Supply `-node-epoch-url`, `-node-witness-epoch-url` and `-files-root`
+together to compare the loaded rollup configuration of two operators' ZVM
+nodes as part of the same observation. Use their full `/api/epoch` URLs and
+verify their operational identity and transport. The verifier checks the raw
+rollup file against its signed digest and parses it under the release rules.
+It hashes the resulting `rollup.Config` as encoded by Go's `encoding/json`
+`Marshal`. Both nodes must report the schema 1 digest and matching L1 and L2
+chain IDs and L2 genesis hash before and after the common-height checks.
+The receipt includes the loaded configuration digest and two observations
+while keeping endpoint URLs local. The response cap is 4 KiB per node read.
+Node reports describe the configuration loaded for derivation. Host and
+container identity, runtime configuration changes and finality remain
+subject to independent observation.
+
 ## Docker image observations
 
 An observer can verify the image selected by a running Docker container

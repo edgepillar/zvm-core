@@ -17,6 +17,8 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
+
+	"github.com/Zenoglyphs-VM/zvm-core/rollup"
 )
 
 const fixtureMomentum = "4242424242424242424242424242424242424242424242424242424242424242"
@@ -105,9 +107,9 @@ func observeFixture(t *testing.T, m Manifest, genesis, block *types.Header, chan
 	return server.URL
 }
 
-func TestReleaseChainObservationAtCommonHeights(t *testing.T) {
-	f := newFixture(t)
-	raw, err := os.ReadFile("../chains/l2/genesis.json")
+func chainFixtureHeaders(t *testing.T, chain string) (*types.Header, *types.Header) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "chains", chain, "genesis.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,6 +122,12 @@ func TestReleaseChainObservationAtCommonHeights(t *testing.T) {
 	block.Number.SetUint64(3)
 	block.ParentHash = genesis.Hash()
 	block.Time++
+	return genesis, block
+}
+
+func TestReleaseChainObservationAtCommonHeights(t *testing.T) {
+	f := newFixture(t)
+	genesis, block := chainFixtureHeaders(t, "l2")
 	for _, test := range []struct {
 		name, change, errorText string
 	}{
@@ -164,6 +172,93 @@ func TestReleaseChainObservationAtCommonHeights(t *testing.T) {
 			if json.Unmarshal(result, &observation) != nil || observation != want {
 				t.Fatalf("unexpected CLI observation: %s", result)
 			}
+		})
+	}
+}
+
+func serveFixtureNodeEpoch(t *testing.T, value nodeEpochObservation, mode string) string {
+	t.Helper()
+	var reads atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/epoch" || r.Header.Get("Cache-Control") != "no-cache" {
+			t.Error("observer did not request a fresh node epoch")
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		response := value
+		count := reads.Add(1)
+		if mode == "different" || (mode == "changed" && count > 1) {
+			response.LoadedRollupSHA256 = strings.Repeat("a", 64)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if mode == "oversized" {
+			_, _ = w.Write([]byte(strings.Repeat(" ", (4<<10)+1)))
+			return
+		}
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			t.Error(err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server.URL + "/api/epoch"
+}
+
+func TestReleaseChainObservationBindsLoadedNodeEpoch(t *testing.T) {
+	const chain = "l2-69"
+	f := newFixtureForChain(t, chain)
+	genesis, block := chainFixtureHeaders(t, chain)
+	cfg, err := rollup.Load(filepath.Join("..", "chains", chain, "rollup.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := nodeEpochObservation{
+		Schema: 1, L1ChainID: strconv.FormatUint(cfg.L1ChainID, 10), L2ChainID: strconv.FormatUint(cfg.L2ChainID, 10),
+		L2GenesisHash: cfg.L2GenesisHash.Hex(), LoadedRollupSHA256: digest(loaded),
+	}
+	primaryRPC := observeFixture(t, f.manifest, genesis, block, "")
+	witnessRPC := observeFixture(t, f.manifest, genesis, block, "")
+	for _, test := range []struct {
+		name, mode, errorText string
+	}{
+		{"two matching loaded configurations", "", ""},
+		{"witness disagrees before chain observation", "different", "disagrees with the signed rollup"},
+		{"witness changes after chain observation", "changed", "disagrees with the signed rollup"},
+		{"oversized witness response", "oversized", "node epoch response was invalid"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			primary := serveFixtureNodeEpoch(t, expected, "")
+			witness := serveFixtureNodeEpoch(t, expected, test.mode)
+			target := ChainTargets{
+				L1: [2]string{primaryRPC, witnessRPC}, L2: [2]string{primaryRPC, witnessRPC}, L1Height: 5, L2Height: 3,
+				NodeEpoch: [2]string{primary, witness}, FilesRoot: f.files,
+			}
+			got, err := f.manifest.ObserveChain(t.Context(), f.policy, f.signatures(t), f.keys, target)
+			if test.errorText != "" {
+				if err == nil || !strings.Contains(err.Error(), test.errorText) || got != (ChainObservation{}) {
+					t.Fatalf("inconsistent node epoch received a record: %+v, %v", got, err)
+				}
+				return
+			}
+			if err != nil || got.VerifiedNodeEpochs != 2 || got.LoadedRollupSHA256 != expected.LoadedRollupSHA256 ||
+				got.L2.Hash != block.Hash().Hex() {
+				t.Fatalf("the node epoch did not match the signed configuration at the agreed chain heads: %+v, %v", got, err)
+			}
+			inputs := writeReleaseTestInputs(t, f)
+			raw := runReleaseTestCLI(t, "release-observe-chain", "-manifest", filepath.Join(inputs, "manifest.json"),
+				"-policy", filepath.Join(inputs, "policy.json"), "-signatures", filepath.Join(inputs, "signatures.json"),
+				"-trusted-keys", filepath.Join(inputs, "keys.json"), "-files-root", f.files,
+				"-l1-rpc", primaryRPC, "-l1-witness-rpc", witnessRPC, "-l1-height", "5",
+				"-l2-rpc", primaryRPC, "-l2-witness-rpc", witnessRPC, "-l2-height", "3",
+				"-node-epoch-url", primary, "-node-witness-epoch-url", witness)
+			var decoded ChainObservation
+			if json.Unmarshal(raw, &decoded) != nil || decoded != got || strings.Contains(string(raw), "http://") {
+				t.Fatal("the release CLI did not produce the scoped node epoch observation")
+			}
+			t.Logf("Verified chain-69 loaded rollup SHA-256 %s from %d endpoints", got.LoadedRollupSHA256, got.VerifiedNodeEpochs)
 		})
 	}
 }

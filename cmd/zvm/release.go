@@ -135,6 +135,9 @@ func releaseObserveChain(args []string, w io.Writer) error {
 	l2Witness := fs.String("l2-witness-rpc", "", "independently selected execution RPC URL")
 	l1Height := fs.Uint64("l1-height", 0, "NoM momentum height to compare")
 	l2Height := fs.Uint64("l2-height", 0, "execution block number to compare")
+	nodeEpoch := fs.String("node-epoch-url", "", "primary node's loaded epoch endpoint")
+	nodeWitness := fs.String("node-witness-epoch-url", "", "independently selected node's loaded epoch endpoint")
+	filesRoot := fs.String("files-root", "", "signed files root for node epoch verification")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -148,6 +151,7 @@ func releaseObserveChain(args []string, w io.Writer) error {
 	observation, err := m.ObserveChain(context.Background(), p, s, k, release.ChainTargets{
 		L1: [2]string{*l1, *l1Witness}, L2: [2]string{*l2, *l2Witness},
 		L1Height: *l1Height, L2Height: *l2Height,
+		NodeEpoch: [2]string{*nodeEpoch, *nodeWitness}, FilesRoot: *filesRoot,
 	})
 	if err != nil {
 		return err

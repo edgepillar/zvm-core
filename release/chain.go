@@ -25,6 +25,8 @@ import (
 type ChainTargets struct {
 	L1, L2             [2]string
 	L1Height, L2Height uint64
+	NodeEpoch          [2]string
+	FilesRoot          string
 }
 
 type ObservedBlock struct {
@@ -35,12 +37,14 @@ type ObservedBlock struct {
 // ChainObservation records agreement at specific heights, bound to the signed
 // manifest. Image, process and finality acceptance use separate evidence.
 type ChainObservation struct {
-	ManifestSHA256    string        `json:"manifestSha256"`
-	EpochSHA256       string        `json:"epochSha256"`
-	TrustedSignatures int           `json:"trustedSignatures"`
-	L1                ObservedBlock `json:"l1"`
-	L2                ObservedBlock `json:"l2"`
-	VerifiedContracts int           `json:"verifiedContracts"`
+	ManifestSHA256     string        `json:"manifestSha256"`
+	EpochSHA256        string        `json:"epochSha256"`
+	TrustedSignatures  int           `json:"trustedSignatures"`
+	L1                 ObservedBlock `json:"l1"`
+	L2                 ObservedBlock `json:"l2"`
+	VerifiedContracts  int           `json:"verifiedContracts"`
+	LoadedRollupSHA256 string        `json:"loadedRollupSha256,omitempty"`
+	VerifiedNodeEpochs int           `json:"verifiedNodeEpochs,omitempty"`
 }
 
 type chainTransport struct {
@@ -181,6 +185,19 @@ func (m Manifest) ObserveChain(parent context.Context, p Policy, s Signatures, k
 	if err := observerEndpoints(targets.L2); err != nil {
 		return result, err
 	}
+	var nodeEpoch nodeEpochObservation
+	if targets.NodeEpoch != ([2]string{}) || targets.FilesRoot != "" {
+		if targets.FilesRoot == "" {
+			return result, errors.New("node epoch observation requires both endpoint URLs and the signed files root")
+		}
+		if err := observerEndpoints(targets.NodeEpoch); err != nil {
+			return result, err
+		}
+		nodeEpoch, err = m.expectedNodeEpoch(targets.FilesRoot)
+		if err != nil {
+			return result, err
+		}
+	}
 	manifest, err := m.Fingerprint()
 	if err != nil {
 		return result, err
@@ -196,6 +213,11 @@ func (m Manifest) ObserveChain(parent context.Context, p Policy, s Signatures, k
 	httpClient := &http.Client{
 		Transport: transport, Timeout: 10 * time.Second,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	if nodeEpoch.Schema != 0 {
+		if err := observeNodeEpochs(ctx, httpClient, targets.NodeEpoch, nodeEpoch); err != nil {
+			return result, err
+		}
 	}
 	dial := func(endpoints [2]string) ([2]*rpc.Client, error) {
 		var clients [2]*rpc.Client
@@ -235,8 +257,16 @@ func (m Manifest) ObserveChain(parent context.Context, p Policy, s Signatures, k
 	if before != after {
 		return result, errors.New("L1 endpoints changed the observed momentum during verification")
 	}
-	return ChainObservation{
+	result = ChainObservation{
 		ManifestSHA256: manifest, EpochSHA256: epoch, TrustedSignatures: count,
 		L1: before, L2: execution, VerifiedContracts: len(m.Contracts),
-	}, nil
+	}
+	if nodeEpoch.Schema != 0 {
+		if err := observeNodeEpochs(ctx, httpClient, targets.NodeEpoch, nodeEpoch); err != nil {
+			return ChainObservation{}, err
+		}
+		result.LoadedRollupSHA256 = nodeEpoch.LoadedRollupSHA256
+		result.VerifiedNodeEpochs = len(targets.NodeEpoch)
+	}
+	return result, nil
 }

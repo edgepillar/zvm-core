@@ -13,11 +13,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check out the NoM reference source
+        uses: actions/checkout@v4
+        with:
+          repository: zenon-network/go-zenon
+          ref: e4513e2a8afafa5658da327eeb28a6bf8a6abce4
+          persist-credentials: false
+          path: .nom-reference
 
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            .nom-reference/go.sum
+
+      - name: Build the NoM genesis verifier
+        working-directory: .nom-reference
+        env:
+          GOWORK: "off"
+          GOTOOLCHAIN: local
+          CGO_ENABLED: "0"
+        run: |
+          test "$(git rev-parse HEAD)" = e4513e2a8afafa5658da327eeb28a6bf8a6abce4
+          go build -mod=readonly -trimpath -o "$RUNNER_TEMP/zvm-nom-genesis" "$GITHUB_WORKSPACE/tools/nom-genesis/main.go"
+          sha256sum "$RUNNER_TEMP/zvm-nom-genesis"
 
       - run: go build ./...
       - run: go vet ./...
       - run: go test -json -count=1 ./...
+        env:
+          ZVM_TEST_NOM_GENESIS_VERIFIER: ${{ runner.temp }}/zvm-nom-genesis
+          ZVM_TEST_NOM_DEVNET_GENESIS: ${{ github.workspace }}/.nom-reference/docker/devnet/genesis.json

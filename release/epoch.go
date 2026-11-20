@@ -2,6 +2,7 @@ package release
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -50,9 +51,12 @@ func genesisHash(g *core.Genesis) (hash common.Hash, err error) {
 }
 
 // VerifyEpochFiles binds configuration, the L2 genesis construction and
-// declared runtime bytecode. The L1 genesis block hash still requires an
-// independently qualified NoM implementation/runtime observation.
+// declared runtime bytecode.
 func (m Manifest) VerifyEpochFiles(directory string) error {
+	return m.verifyEpochFiles(context.Background(), directory, "")
+}
+
+func (m Manifest) verifyEpochFiles(ctx context.Context, directory, l1Verifier string) error {
 	if err := m.validate(); err != nil {
 		return err
 	}
@@ -126,6 +130,15 @@ func (m Manifest) VerifyEpochFiles(directory string) error {
 		// Genesis predeploys also have to be the code the L2 genesis carries.
 		if account, ok := g.Alloc[common.HexToAddress(c.Address)]; ok && !bytes.Equal(account.Code, code) {
 			return errors.New("declared predeploy code disagrees with genesis")
+		}
+	}
+	if l1Verifier != "" {
+		raw, err := readPin(root, byKind["l1-genesis"], maxL1GenesisBytes)
+		if err != nil {
+			return err
+		}
+		if err := m.verifyL1Genesis(ctx, raw, l1Verifier); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -74,6 +74,7 @@ func releaseVerify(args []string, w io.Writer) error {
 	keys := fs.String("trusted-keys", "", "independently provisioned public-key inventory")
 	files := fs.String("files-root", "", "root of repository-relative pinned files")
 	sources := fs.String("sources-root", "", "root of clean repository worktrees")
+	l1Verifier := fs.String("l1-genesis-verifier", "", "absolute path to an independently provisioned NoM genesis verifier")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -100,7 +101,13 @@ func releaseVerify(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	receipt, err := m.Verify(context.Background(), p, s, k, *files, *sources)
+	ctx := context.Background()
+	var receipt release.Receipt
+	if *l1Verifier == "" {
+		receipt, err = m.Verify(ctx, p, s, k, *files, *sources)
+	} else {
+		receipt, err = m.VerifyWithL1Genesis(ctx, p, s, k, *files, *sources, *l1Verifier)
+	}
 	if err != nil {
 		return err
 	}

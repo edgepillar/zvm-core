@@ -43,9 +43,10 @@ hashes, raw rollup/deployment file SHA-256 values, and `isthmus` or `karst` EVM
 rules. The verifier uses the normal strict rollup decoder and checks the
 signed L2 genesis as bounded UTF-8 JSON with unique object members before
 passing it to the execution client decoder. It reconstructs the supported L2
-genesis and checks its execution rules and block hash. The L1
-genesis file's bytes are verified; deriving its declared momentum hash still
-requires an independently qualified NoM implementation and runtime observation.
+genesis and checks its execution rules and block hash. With an independently
+provisioned NoM verifier, it reconstructs the height-1 momentum from the signed
+L1 genesis and checks its chain ID and momentum hash against the epoch. The
+strict rollup decoder binds the rollup's L1 chain ID to that same epoch.
 The operator must rotate the epoch ID on every chain reset, including a reset
 that deliberately reuses identical genesis files and chain IDs. A running node
 must expose the independently accepted epoch identity before an application can
@@ -86,11 +87,31 @@ Duplicate keys/signatures cannot satisfy a quorum.
 zvm release-verify \
   -manifest manifest.json -policy policy.json \
   -signatures signatures.json -trusted-keys trusted-keys.json \
-  -files-root release-inputs -sources-root source-checkouts
+  -files-root release-inputs -sources-root source-checkouts \
+  -l1-genesis-verifier "$VERIFIER"
 ```
 
+Build the helper in the independently reviewed go-zenon checkout used by the
+release. `CORE_SOURCE`, `NOM_SOURCE` and `VERIFIER` are absolute paths chosen by
+the verifier operator. The helper builds against go-zenon's existing module
+lock and runs independently of the Core binary.
+
+```sh
+GOWORK=off go -C "$NOM_SOURCE" build -mod=readonly -trimpath \
+  -o "$VERIFIER" "$CORE_SOURCE/tools/nom-genesis/main.go"
+```
+
+The operator provisions and qualifies this executable independently of the
+manifest. Core sends the exact SHA-256-pinned L1 genesis bytes to its standard
+input, with a 16 MiB input limit and a 30-second execution deadline. The helper
+uses go-zenon's genesis validation and construction. Its output must be one
+JSON object containing `chainId` and `momentumHash`. An execution error or a
+disagreement prevents a receipt. With the option omitted, the default offline
+receipt includes `verifiedL1Genesis: false`. Release acceptance requires
+`verifiedL1Genesis: true` and separate evidence about the running candidate.
+
 Verification authenticates signatures before reading the input set or running
-Git. Git reads are bounded and do not fetch, initialize, reset or modify source
+Git or the NoM helper. Git reads are bounded and do not fetch, initialize, reset or modify source
 trees. Git must support `--no-lazy-fetch` and `--no-replace-objects`; an unsupported
 Git fails rather than falling back to network access or replacement objects.
 Hooks, fsmonitor, global configuration and credential prompts are disabled.
@@ -105,7 +126,7 @@ total. Each Git read has a ten-second deadline. Metadata output streams have
 a 2 MiB limit, and each lock blob has its signed byte limit.
 Receipts contain digests/counts and `runtimeObserved: false`, without local paths.
 Image references, declared platform/version labels, running binary/image identity,
-L1 genesis calculation, independent node agreement and production behavior require
+independent node agreement and production behavior require
 separate qualification. A valid offline receipt cannot turn those gates green.
 
 The offline verifier and service assertion producer use the same rollup
@@ -114,8 +135,10 @@ when the file digest and signature quorum match. This includes members
 with equal values and names that match after JSON unescaping or case folding.
 
 Tests use synthetic tool/image labels, ephemeral signing keys and throwaway Git
-repositories. The shipped L2 configuration/genesis supply the actual supported
-construction fixture. No wallet, container or live chain is started.
+repositories. CI tests the shipped L2 configuration/genesis and the matching
+NoM genesis profiles offline. The chain-69 fixture comes from the pinned
+go-zenon checkout shared by Devnet and Fleet. No wallet, container or live chain
+is started.
 
 ## Saved contract build material
 

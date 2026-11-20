@@ -182,7 +182,7 @@ func TestSignedOfflineReleaseBindsFilesSourcesAndEpochWithoutClaimingRuntime(t *
 			if err != nil {
 				t.Fatal(err)
 			}
-			if r.RuntimeObserved || r.TrustedSignatures != 2 || r.VerifiedFiles != 7 || r.VerifiedRepositories != 2 || r.ManifestSHA256 == "" || r.EpochSHA256 == "" {
+			if r.RuntimeObserved || r.VerifiedL1Genesis || r.TrustedSignatures != 2 || r.VerifiedFiles != 7 || r.VerifiedRepositories != 2 || r.ManifestSHA256 == "" || r.EpochSHA256 == "" {
 				t.Fatalf("wrong verification scope: %+v", r)
 			}
 			raw, err := json.Marshal(r)
@@ -667,6 +667,10 @@ func TestEpochSemanticChecksRejectResignedInconsistentFiles(t *testing.T) {
 
 func TestReleaseCLIEmitsTheSigningMessageAndVerifiesTheActualInputSet(t *testing.T) {
 	f := newFixture(t)
+	verifier := os.Getenv("ZVM_TEST_NOM_GENESIS_VERIFIER")
+	if verifier != "" {
+		pinNoMGenesis(t, f, verifier, "../chains/nom/genesis.json")
+	}
 	inputs := t.TempDir()
 	for name, value := range map[string]any{"manifest": f.manifest, "policy": f.policy, "signatures": f.signatures(t), "keys": f.keys} {
 		raw, err := json.MarshalIndent(value, "", "  ")
@@ -702,11 +706,14 @@ func TestReleaseCLIEmitsTheSigningMessageAndVerifiesTheActualInputSet(t *testing
 	}
 	args := append([]string{"release-verify"}, common...)
 	args = append(args, "-signatures", filepath.Join(inputs, "signatures.json"), "-trusted-keys", filepath.Join(inputs, "keys.json"), "-files-root", f.files, "-sources-root", f.sources)
+	if verifier != "" {
+		args = append(args, "-l1-genesis-verifier", verifier)
+	}
 	var receipt Receipt
 	if err := json.Unmarshal(run(args...), &receipt); err != nil {
 		t.Fatal(err)
 	}
-	if receipt.RuntimeObserved || receipt.TrustedSignatures != 2 || receipt.VerifiedFiles != 7 || receipt.VerifiedRepositories != 2 {
+	if receipt.RuntimeObserved || receipt.VerifiedL1Genesis != (verifier != "") || receipt.TrustedSignatures != 2 || receipt.VerifiedFiles != 7 || receipt.VerifiedRepositories != 2 {
 		t.Fatalf("CLI scope is wrong: %+v", receipt)
 	}
 }

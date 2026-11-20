@@ -58,12 +58,15 @@ func TestOCIImageResolvesSignedPlatformAndBytes(t *testing.T) {
 	}
 	amd := ociPlatform{OS: "linux", Architecture: "amd64"}
 	arm := ociPlatform{OS: "linux", Architecture: "arm64", Variant: "v8"}
-	config := putOCI(t, rootPath, []byte(`{"architecture":"amd64","os":"linux","rootfs":{"type":"layers","diff_ids":[]}}`), ociConfig)
+	configBytes := []byte(`{"architecture":"amd64","os":"linux","rootfs":{"type":"layers","diff_ids":[]}}`)
+	config := putOCI(t, rootPath, configBytes, ociConfig)
 	manifest := fixtureOCIManifest(t, rootPath, config, []ociDescriptor{})
 	manifest.Platform = &amd
 	other := manifest
 	other.Platform = &arm
-	index := fixtureOCIIndex(t, rootPath, manifest, other)
+	unsupported := manifest
+	unsupported.MediaType = "application/vnd.example.other+json"
+	index := fixtureOCIIndex(t, rootPath, unsupported, manifest, other)
 	duplicate := fixtureOCIIndex(t, rootPath, manifest, manifest)
 	wrongSize := manifest
 	size := *wrongSize.Size + 1
@@ -71,10 +74,6 @@ func TestOCIImageResolvesSignedPlatformAndBytes(t *testing.T) {
 	badIndex := fixtureOCIIndex(t, rootPath, wrongSize)
 	wrongDigest := config
 	wrongDigest.Digest = "sha256:" + strings.Repeat("4", 64)
-	configBytes, err := os.ReadFile(filepath.Join(rootPath, "blobs", "sha256", strings.TrimPrefix(config.Digest, "sha256:")))
-	if err != nil {
-		t.Fatal(err)
-	}
 	if err := os.WriteFile(filepath.Join(rootPath, "blobs", "sha256", strings.Repeat("4", 64)), configBytes, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -106,6 +105,32 @@ func TestOCIImageResolvesSignedPlatformAndBytes(t *testing.T) {
 			}
 			if err != nil || ref != test.rootDigest || platform != manifest.Digest || actual != config.Digest {
 				t.Fatalf("unexpected resolved OCI image: %q %q %q: %v", ref, platform, actual, err)
+			}
+		})
+	}
+}
+
+func TestDockerImageObservationRequiresMatchingManifestOrClassicConfig(t *testing.T) {
+	id, config, manifest := strings.Repeat("1", 64), "sha256:"+strings.Repeat("2", 64), "sha256:"+strings.Repeat("3", 64)
+	different := "sha256:" + strings.Repeat("4", 64)
+	for _, test := range []struct {
+		name, image, reportedManifest, status, errorText string
+	}{
+		{"classic store", config, "", "running", ""},
+		{"manifest store", different, manifest, "running", ""},
+		{"conflicting runtime manifest", config, different, "running", "manifest disagrees"},
+		{"classic config differs", different, "", "running", "image ID disagrees"},
+		{"paused container", config, "", "paused", "selected container running"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			raw := imageJSON(t, map[string]any{"id": id, "image": test.image, "manifest": test.reportedManifest, "status": test.status, "running": true})
+			got, err := checkDockerImage(raw, id, manifest, config)
+			if test.errorText != "" {
+				if err == nil || !strings.Contains(err.Error(), test.errorText) {
+					t.Fatalf("unexpected check error: %v", err)
+				}
+			} else if err != nil || got != test.reportedManifest {
+				t.Fatalf("unexpected checked manifest: %q: %v", got, err)
 			}
 		})
 	}
@@ -197,13 +222,30 @@ func TestReleaseImageObservationAgainstDockerEngine(t *testing.T) {
 	configRaw := makeConfig("selected")
 	config := putOCI(t, root, configRaw, ociConfig)
 	manifest := fixtureOCIManifest(t, root, config, []ociDescriptor{layerDescriptor})
-	configFile := strings.TrimPrefix(config.Digest, "sha256:") + ".json"
-	loadManifest := imageJSON(t, []any{map[string]any{"Config": configFile, "Layers": []string{"layer.tar"}}})
-	archive := fixtureTar(t, tarEntry{configFile, 0600, configRaw}, tarEntry{"layer.tar", 0600, layer},
-		tarEntry{"manifest.json", 0600, loadManifest})
+	blobPath := func(value string) string { return "blobs/sha256/" + strings.TrimPrefix(value, "sha256:") }
+	manifestRaw, err := os.ReadFile(filepath.Join(root, blobPath(manifest.Digest)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tag := "docker.io/library/zvm-oci-observation-fixture:" + strings.TrimPrefix(config.Digest, "sha256:")[:12]
+	index := imageJSON(t, map[string]any{
+		"schemaVersion": 2, "mediaType": ociIndex, "manifests": []any{map[string]any{
+			"mediaType": manifest.MediaType, "digest": manifest.Digest, "size": *manifest.Size,
+			"platform":    ociPlatform{OS: "linux", Architecture: runtime.GOARCH},
+			"annotations": map[string]string{"io.containerd.image.name": tag, "org.opencontainers.image.ref.name": tag},
+		}},
+	})
+	loadManifest := imageJSON(t, []any{map[string]any{
+		"Config": blobPath(config.Digest), "RepoTags": []string{tag}, "Layers": []string{blobPath(layerDescriptor.Digest)},
+	}})
+	archive := fixtureTar(t, tarEntry{blobPath(config.Digest), 0600, configRaw},
+		tarEntry{blobPath(layerDescriptor.Digest), 0600, layer}, tarEntry{blobPath(manifest.Digest), 0600, manifestRaw},
+		tarEntry{"oci-layout", 0600, []byte(`{"imageLayoutVersion":"1.0.0"}`)},
+		tarEntry{"index.json", 0600, index}, tarEntry{"manifest.json", 0600, loadManifest})
+	engine := fixtureDocker(t, nil, "version", "--format", "{{.Server.Version}}")
 	fixtureDocker(t, archive, "image", "load", "--quiet")
 	container := fixtureDocker(t, nil, "container", "run", "--detach", "--rm", "--pull=never",
-		"--network=none", "--read-only", config.Digest)
+		"--network=none", "--read-only", tag)
 	if !hash(container, 64) {
 		t.Fatal("Docker did not return the full fixture container ID")
 	}
@@ -232,17 +274,24 @@ func TestReleaseImageObservationAgainstDockerEngine(t *testing.T) {
 		ImageID: image.ID, Platform: image.Platform, ReferenceDigest: manifest.Digest,
 		PlatformManifest: manifest.Digest, ImageConfigDigest: config.Digest, ContainerRunning: true,
 	}
-	if json.Unmarshal(raw, &observation) != nil || observation != want ||
+	if json.Unmarshal(raw, &observation) != nil ||
+		(observation.ObservedPlatformManifest != "" && observation.ObservedPlatformManifest != manifest.Digest) {
+		t.Fatal("release CLI returned an invalid observed platform manifest")
+	}
+	want.ObservedPlatformManifest = observation.ObservedPlatformManifest
+	if observation != want ||
 		bytes.Contains(raw, []byte(container)) || bytes.Contains(raw, []byte(root)) {
 		t.Fatal("release CLI did not bind the running Docker image to the signed manifest")
 	}
-	t.Logf("Verified running Docker fixture image configuration %s", observation.ImageConfigDigest)
+	t.Logf("Verified Docker %s running fixture image configuration %s, observed platform manifest %t",
+		engine, observation.ImageConfigDigest, observation.ObservedPlatformManifest != "")
 
 	otherConfig := putOCI(t, root, makeConfig("different"), ociConfig)
 	otherManifest := fixtureOCIManifest(t, root, otherConfig, []ociDescriptor{layerDescriptor})
 	image.Reference = "registry.invalid/fixture/engine@" + otherManifest.Digest
 	observation, err = f.manifest.ObserveImage(t.Context(), f.policy, f.signatures(t), f.keys, target)
-	if err == nil || !strings.Contains(err.Error(), "running container image ID disagrees") || observation != (ImageObservation{}) {
+	if err == nil || !strings.Contains(err.Error(), "running container") || !strings.Contains(err.Error(), "disagrees") ||
+		observation != (ImageObservation{}) {
 		t.Fatalf("running container received a record for a different signed image: %+v, %v", observation, err)
 	}
 }

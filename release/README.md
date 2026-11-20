@@ -189,9 +189,11 @@ The verifier authenticates the signed manifest before reading blobs. The
 reference may select an OCI or Docker v2 manifest, or an index with a unique
 direct image manifest descriptor for the signed platform. The verifier hashes
 the exact manifest and configuration bytes and checks descriptor sizes and
-platform metadata. It reads a small projection of `docker container inspect`
-and requires the running container's image ID to equal the configuration
-digest. The command uses previously supplied local blobs and one inspection.
+platform metadata. It reads a small projection of `docker container inspect`.
+When Docker supplies a selected manifest descriptor, its digest must match the
+resolved platform manifest. The classic image store is checked by matching the
+container's image ID to the configuration digest. The command uses previously
+supplied local blobs and one inspection.
 
 The record contains release, epoch and image digests and the signed platform.
 It omits container IDs, Docker contexts, local paths and environment values.

@@ -31,18 +31,19 @@ type ImageTarget struct {
 	OCIRoot       string
 }
 
-// ImageObservation binds the Docker container's image config ID to the signed
-// reference and selected platform manifest.
+// ImageObservation binds a Docker container's selected image to the signed
+// reference and platform manifest.
 type ImageObservation struct {
-	ManifestSHA256    string `json:"manifestSha256"`
-	EpochSHA256       string `json:"epochSha256"`
-	TrustedSignatures int    `json:"trustedSignatures"`
-	ImageID           string `json:"imageId"`
-	Platform          string `json:"platform"`
-	ReferenceDigest   string `json:"referenceDigest"`
-	PlatformManifest  string `json:"platformManifestDigest"`
-	ImageConfigDigest string `json:"imageConfigDigest"`
-	ContainerRunning  bool   `json:"containerRunning"`
+	ManifestSHA256           string `json:"manifestSha256"`
+	EpochSHA256              string `json:"epochSha256"`
+	TrustedSignatures        int    `json:"trustedSignatures"`
+	ImageID                  string `json:"imageId"`
+	Platform                 string `json:"platform"`
+	ReferenceDigest          string `json:"referenceDigest"`
+	PlatformManifest         string `json:"platformManifestDigest"`
+	ImageConfigDigest        string `json:"imageConfigDigest"`
+	ObservedPlatformManifest string `json:"observedPlatformManifestDigest,omitempty"`
+	ContainerRunning         bool   `json:"containerRunning"`
 }
 
 type ociPlatform struct {
@@ -103,7 +104,8 @@ func selectOCIManifest(index ociImageDocument, want []string) (ociDescriptor, er
 	}
 	var selected ociDescriptor
 	for _, child := range index.Manifests {
-		if child.Platform == nil || !matchesOCIPlatform(*child.Platform, want) {
+		if (child.MediaType != ociManifest && child.MediaType != dockerManifest) ||
+			child.Platform == nil || !matchesOCIPlatform(*child.Platform, want) {
 			continue
 		}
 		if selected.Platform != nil {
@@ -111,7 +113,7 @@ func selectOCIManifest(index ociImageDocument, want []string) (ociDescriptor, er
 		}
 		selected = child
 	}
-	if selected.Size == nil || (selected.MediaType != ociManifest && selected.MediaType != dockerManifest) {
+	if selected.Size == nil {
 		return ociDescriptor{}, errors.New("OCI image index has no supported manifest for the signed platform")
 	}
 	return selected, nil
@@ -174,31 +176,44 @@ func resolveOCIImage(root *os.Root, image Image) (reference, manifest, config st
 	return reference, manifest, config, nil
 }
 
-func observeDockerImage(parent context.Context, target ImageTarget, config string) error {
+func observeDockerImage(parent context.Context, target ImageTarget, platform, config string) (string, error) {
 	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
-	const projected = `{"id":{{json .Id}},"image":{{json .Image}},"status":{{json .State.Status}},"running":{{json .State.Running}}}`
+	// Use the JSON field names across Docker API versions. The selected image
+	// descriptor is optional on engines with the classic image store.
+	const projected = `{"id":{{json (index . "Id")}},"image":{{json (index . "Image")}},"status":{{json (index (index . "State") "Status")}},"running":{{json (index (index . "State") "Running")}},"manifest":{{with index . "ImageManifestDescriptor"}}{{json (index . "digest")}}{{else}}""{{end}}}`
 	cmd := exec.CommandContext(ctx, "docker", "--context", target.DockerContext, "container", "inspect",
 		"--format", projected, "--", target.ContainerID)
 	cmd.WaitDelay = time.Second
 	var output commandOutput
 	cmd.Stdout = &output
 	if cmd.Run() != nil || output.overflow || output.data.Len() > 1024 {
-		return errors.New("Docker container observation was unavailable")
+		return "", errors.New("Docker container observation was unavailable")
 	}
+	return checkDockerImage(output.data.Bytes(), target.ContainerID, platform, config)
+}
+
+func checkDockerImage(raw []byte, container, platform, config string) (string, error) {
 	var observed struct {
-		ID      string `json:"id"`
-		Image   string `json:"image"`
-		Status  string `json:"status"`
-		Running bool   `json:"running"`
+		ID       string `json:"id"`
+		Image    string `json:"image"`
+		Status   string `json:"status"`
+		Running  bool   `json:"running"`
+		Manifest string `json:"manifest"`
 	}
-	if decode(output.data.Bytes(), &observed) != nil || observed.ID != target.ContainerID || !observed.Running || observed.Status != "running" {
-		return errors.New("Docker did not report the selected container running")
+	if decode(raw, &observed) != nil || observed.ID != container || !observed.Running || observed.Status != "running" || !sha256Descriptor(observed.Image) {
+		return "", errors.New("Docker did not report the selected container running with a valid image ID")
+	}
+	if observed.Manifest != "" {
+		if observed.Manifest != platform {
+			return "", errors.New("running container manifest disagrees with the signed platform manifest")
+		}
+		return observed.Manifest, nil
 	}
 	if observed.Image != config {
-		return errors.New("running container image ID disagrees with the signed image configuration")
+		return "", errors.New("running container image ID disagrees with the signed image configuration")
 	}
-	return nil
+	return "", nil
 }
 
 // ObserveImage authenticates the release before reading OCI blobs or inspecting
@@ -219,7 +234,7 @@ func (m Manifest) ObserveImage(ctx context.Context, p Policy, s Signatures, k Tr
 	}
 	defer root.Close()
 	image := m.Images[index]
-	reference, platform, config, err := resolveOCIImage(root, image)
+	reference, platformManifest, config, err := resolveOCIImage(root, image)
 	if err != nil {
 		return result, err
 	}
@@ -231,12 +246,14 @@ func (m Manifest) ObserveImage(ctx context.Context, p Policy, s Signatures, k Tr
 	if err != nil {
 		return result, err
 	}
-	if err := observeDockerImage(ctx, target, config); err != nil {
+	observedManifest, err := observeDockerImage(ctx, target, platformManifest, config)
+	if err != nil {
 		return result, err
 	}
 	return ImageObservation{
 		ManifestSHA256: manifest, EpochSHA256: epoch, TrustedSignatures: count,
 		ImageID: image.ID, Platform: image.Platform, ReferenceDigest: reference,
-		PlatformManifest: platform, ImageConfigDigest: config, ContainerRunning: true,
+		PlatformManifest: platformManifest, ImageConfigDigest: config,
+		ObservedPlatformManifest: observedManifest, ContainerRunning: true,
 	}, nil
 }

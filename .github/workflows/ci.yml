@@ -44,7 +44,14 @@ jobs:
 
       - run: go build ./...
       - run: go vet ./...
+      - name: Generate the chain-69 Devnet genesis fixture
+        run: |
+          timestamp=$(jq -er '.l2GenesisTimestamp' chains/l2-69/rollup.json)
+          go run -mod=readonly ./cmd/zvm l1-genesis \
+            -out "$RUNNER_TEMP/zvm-l1-devnet" -devnet .nom-reference/docker/devnet \
+            -chain-id 69 -dynamic-plasma=true -timestamp "$timestamp"
+          sha256sum "$RUNNER_TEMP/zvm-l1-devnet/genesis.json"
       - run: go test -json -count=1 ./...
         env:
           ZVM_TEST_NOM_GENESIS_VERIFIER: ${{ runner.temp }}/zvm-nom-genesis
-          ZVM_TEST_NOM_DEVNET_GENESIS: ${{ github.workspace }}/.nom-reference/docker/devnet/genesis.json
+          ZVM_TEST_NOM_DEVNET_GENESIS: ${{ runner.temp }}/zvm-l1-devnet/genesis.json

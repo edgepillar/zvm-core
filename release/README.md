@@ -137,9 +137,9 @@ with equal values and names that match after JSON unescaping or case folding.
 
 Tests use synthetic tool/image labels, ephemeral signing keys and throwaway Git
 repositories. CI tests the shipped L2 configuration/genesis and the matching
-NoM genesis profiles offline. The chain-69 fixture comes from the pinned
-go-zenon checkout shared by Devnet and Fleet. No wallet, container or live chain
-is started.
+NoM genesis profiles offline. CI produces the chain-69 input with the same
+`zvm l1-genesis` command used by Devnet and a timestamp from the tracked rollup.
+No wallet, container or live chain is started.
 
 ## Saved contract build material
 

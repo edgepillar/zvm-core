@@ -11,6 +11,7 @@ import (
 	"os"
 	"unicode/utf8"
 
+	"github.com/inconshreveable/log15"
 	"github.com/zenon-network/go-zenon/chain/genesis"
 )
 
@@ -47,6 +48,7 @@ func reconstruct(input io.Reader) (computed result, err error) {
 }
 
 func main() {
+	log15.Root().SetHandler(log15.LvlFilterHandler(log15.LvlError, log15.StderrHandler))
 	value, err := reconstruct(os.Stdin)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

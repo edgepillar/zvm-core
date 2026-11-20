@@ -257,18 +257,19 @@ and keep the existing fourteen-day retention policy. No additional token
 permissions, privileged trigger, custom download mirror or manual retry is added.
 
 The Dockerfile frontend uses the stable major-1 channel at a full index digest.
-The runtime base selects Alpine 3.22.8 at a full index digest and pins the
-requested ca-certificates and wget package versions. The Go builder's digest
-and exact SDK check remain in place. Registry content digests identify selected
+The runtime base selects Alpine 3.22.8 at a full index digest and pins
+ca-certificates. The CLI uses Go HTTP clients, and the base image provides
+BusyBox wget for simple shell probes. The Go builder uses a full index digest
+and checks the exact SDK version. Registry content digests identify selected
 bytes; they do not independently authenticate image origin or provenance.
 Alpine 3.22's main branch is supported through May 1, 2027 according to the
 [upstream release table](https://alpinelinux.org/releases/). Continued maintenance
 is required; this patch does not migrate every supported platform.
 
 The container job retains a bounded observation of its exact local image ID,
-OS/architecture, entrypoint/user, installed package versions and CLI binary
-SHA-256. The package and binary commands use that immutable local image ID with
-networking disabled, a read-only filesystem and UID/GID 65534. Actual process
+OS/architecture, entrypoint/user, reported size, installed package versions and
+CLI binary SHA-256. The package and binary commands use that immutable local
+image ID with networking disabled, a read-only filesystem and UID/GID 65534. Actual process
 exits, output completeness and stream digests accompany the record; failures
 are retained. The image configuration query selects only these fields rather
 than exporting host paths or environment values. This is an installed-package
@@ -297,8 +298,8 @@ CI reads the manifest from the exact built image. It compares the binary
 digest, Go lock digests and each notice object's size and digest. It also
 compares the embedded project files with the checked source. The image commands
 return manifest and digest metadata, so the report reuses the built binary and
-keeps the notice payloads in the image. The review of compiler intermediates
-and Alpine notice text remains open.
+keeps the notice payloads in the image. Review of compiler intermediates remains
+open.
 
 ## Embedded predeploy source and license catalog
 
@@ -322,6 +323,29 @@ CI compares the catalog and every referenced original text with the notice
 objects in the exact CLI image. The corresponding-source distribution method
 and license obligations for the combined outputs remain open for review by the
 release maintainers. [GNU GPL version 3](https://www.gnu.org/licenses/gpl-3.0.html)
+
+## Alpine runtime package notices
+
+The Linux amd64 catalog records the complete installed APK selection for the
+reviewed build. CI compares the package names and versions from `apk info -v`
+with the installed database. The database records the package checksums, license
+declarations, architectures, declared installed sizes and source recipe commits.
+A change to those inputs requires a catalog update and review.
+[APK package fields](https://github.com/alpinelinux/apk-tools/blob/master/doc/apk-package.5.scd)
+
+The catalog reuses the exact Node source notice payloads for matching APK
+origins. It retains named archive notice files, the certificate bundle's
+original notice headers and its MPL reference text. The catalog links the
+selected text to its recipe and archive and records origins with missing
+notice candidates. CI checks the catalog and each retained object in the exact
+CLI image. Independent corresponding-source and distribution license review
+remain open. [Alpine catalog](../LICENSES/alpine/sources.json) ·
+[Reviewed Node source inventory](https://github.com/Zenoglyphs-VM/zvm-node/blob/07c6edeedc1e4493da241868aa3a64f5313396cf/LICENSES/apk/manifest.json)
+
+CI checks the BusyBox wget provider and fetches a fixed HTTP response over
+loopback in the same network-disabled image. The probe uses the existing
+BusyBox applets and the already-built CLI image. Fleet devnet integration
+requires its own run. [Pinned Alpine BusyBox configuration](https://github.com/alpinelinux/aports/blob/2e97d754a30d558f15524b8e422303c8a96832df/main/busybox/busyboxconfig)
 
 The image metadata projection handles Docker Engine API 1.52's optional
 `Config.User` field and records whether the engine reported it. The observation

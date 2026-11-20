@@ -5,7 +5,8 @@ import unittest
 from unittest.mock import patch
 
 from container_inventory import image_projection
-from container_notices import PREDEPLOY_NOTICE_PREFIX, ROOT_MODULE, payload_rows, verify_bundle, verify_predeploy_notices
+from container_notices import (ALPINE_NOTICE_PREFIX, PREDEPLOY_NOTICE_PREFIX, ROOT_MODULE, payload_rows,
+                               verify_bundle, verify_predeploy_notices)
 from govulncheck_review import ReviewError
 
 
@@ -15,7 +16,8 @@ def pin(raw):
 
 class ImageProjectionTests(unittest.TestCase):
     def test_docker_optional_user_field_preserves_default_and_explicit_values(self):
-        metadata = {"id": "sha256:" + "a" * 64, "os": "linux", "architecture": "amd64", "entrypoint": ["zvm"]}
+        metadata = {"id": "sha256:" + "a" * 64, "os": "linux", "architecture": "amd64", "entrypoint": ["zvm"],
+                    "reportedSizeBytes": 4000}
         for value, expected_user, present in ((None, "", False), ("", "", True), ("65534:65534", "65534:65534", True)):
             with self.subTest(value=value):
                 image, user_present = image_projection(json.dumps({**metadata, "user": value}).encode())
@@ -38,8 +40,31 @@ class ContainerNoticeTests(unittest.TestCase):
                                                               "licenseFiles": ["fixture.txt"]}}}
         self.catalog_path = PREDEPLOY_NOTICE_PREFIX + "sources.json"
         self.license_path = PREDEPLOY_NOTICE_PREFIX + "fixture.txt"
-        self.set_predeploy_file(self.catalog_path, json.dumps(self.catalog).encode())
-        self.set_predeploy_file(self.license_path, self.license)
+        self.set_notice_file(self.catalog_path, json.dumps(self.catalog).encode())
+        self.set_notice_file(self.license_path, self.license)
+        base_image = "alpine:3.22.8@sha256:" + "b" * 64
+        self.checked["Dockerfile"] = f"FROM {base_image}\n".encode()
+        package = {"name": "busybox", "version": "1.37.0-r20", "architecture": "x86_64", "origin": "busybox",
+                   "declaredBuildCommit": "c" * 40, "declaredLicense": "GPL-2.0-only",
+                   "installedChecksum": "Q1" + "a" * 28, "declaredInstalledBytes": 1024,
+                   "licenseTextOrLegalQualificationEstablished": False}
+        self.installed = [package]
+        busybox_license = b"original Alpine source license"
+        busybox_pin = pin(busybox_license)
+        apk_catalog = {
+            "schema": 1, "status": "APK_SOURCE_NOTICE_CANDIDATES_REVIEW_REQUIRED",
+            "legalReviewComplete": False, "completeCorrespondingSource": False, "sourceOriginAuthenticated": False,
+            "profile": {"os": "linux", "architecture": "amd64", "baseImage": base_image},
+            "installedPackages": self.installed,
+            "origins": {"busybox": {
+                "recipe": {"repository": "https://github.com/alpinelinux/aports", "path": "main/busybox/APKBUILD",
+                           "commit": package["declaredBuildCommit"], "gitBlob": "b" * 40, "sha256": "a" * 64},
+                "noticeCandidates": [busybox_pin], "referenceDocuments": [],
+            }},
+        }
+        self.set_notice_file(ALPINE_NOTICE_PREFIX + "sources.json", json.dumps(apk_catalog).encode())
+        self.apk_notice_path = ALPINE_NOTICE_PREFIX + "objects/" + busybox_pin["sha256"]
+        self.set_notice_file(self.apk_notice_path, busybox_license)
         self.pins = [*self.project_notices, self.std_notice, self.header]
         self.module = ROOT_MODULE + "/cmd/zvm"
         self.binary = pin(b"binary")["sha256"]
@@ -67,7 +92,7 @@ class ContainerNoticeTests(unittest.TestCase):
                          for row in self.pins}
         self.observed["README.txt"] = pin(b"bundle guide")
 
-    def set_predeploy_file(self, path, content):
+    def set_notice_file(self, path, content):
         self.checked[path] = content
         self.project_notices.append({"path": path, **pin(content), "selectionScope": "MODULE_NOTICE_DIRECTORY"})
 
@@ -82,24 +107,36 @@ class ContainerNoticeTests(unittest.TestCase):
         raw = (json.dumps(self.manifest) + "\n").encode()
         with patch("container_notices.file_bytes",
                    side_effect=lambda path, limit: self.checked[path.relative_to(self.project).as_posix()]):
-            return verify_bundle(raw, self.observed, self.image, self.source, self.binary, self.project)
+            return verify_bundle(raw, self.observed, self.image, self.source, self.binary, self.project, self.installed)
 
     def test_inventory_binds_every_referenced_object_and_embedded_file(self):
         lines = [f"{row['bytes']} {path}\n" for path, row in self.observed.items()]
         lines += [f"{row['sha256']}  {path}\n" for path, row in self.observed.items()]
         self.assertEqual(payload_rows("".join(lines).encode()), self.observed)
         result = self.verify()
-        self.assertEqual(result["objectCount"], 6)
+        self.assertEqual(result["objectCount"], 8)
         self.assertEqual(result["projectEmbeddedFiles"], {self.embedded["path"]: self.embedded["sha256"]})
         self.assertEqual(result["predeployNotices"], {
             "catalogSHA256": pin(self.checked[self.catalog_path])["sha256"], "thirdPartyEmbeddedFiles": 1,
             "licenseTexts": 1, "licenseTextBytes": len(self.license), "legalReviewComplete": False,
         })
+        self.assertEqual(result["runtimeAPKNotices"]["installedPackages"], 1)
+        self.assertEqual(result["runtimeAPKNotices"]["noticeObjects"], 1)
 
     def test_missing_predeploy_notice_is_rejected(self):
-        self.project_notices.pop()
+        self.project_notices[:] = [row for row in self.project_notices if row["path"] != self.license_path]
         with self.assertRaisesRegex(ReviewError, "predeploy notice inventory differs"):
             self.verify_predeploys()
+
+    def test_changed_apk_checksum_and_notice_bytes_are_rejected(self):
+        checksum = self.installed[0]["installedChecksum"]
+        self.installed[0]["installedChecksum"] = "Q1" + "b" * 28
+        with self.assertRaisesRegex(ReviewError, "catalog differs from installed package declarations"):
+            self.verify()
+        self.installed[0]["installedChecksum"] = checksum
+        self.checked[self.apk_notice_path] = b"changed original license"
+        with self.assertRaisesRegex(ReviewError, "Alpine notice differs from its original byte pin"):
+            self.verify()
 
     def test_changed_predeploy_license_and_stale_embedded_digest_are_rejected(self):
         self.checked[self.license_path] = b"rewritten license"

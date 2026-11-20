@@ -19,7 +19,8 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     --binary /out/zvm --output /out/notices
 
 FROM alpine:3.22.8@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f
-RUN apk add --no-cache ca-certificates=20261020-r0 wget=1.25.0-r1
+# The CLI uses Go HTTP clients. The base image provides BusyBox wget for shell probes.
+RUN apk add --no-cache ca-certificates=20261020-r0
 COPY --from=build /out/zvm /usr/local/bin/zvm
 COPY --from=build /out/notices /usr/share/doc/zvm/notices
 ENTRYPOINT ["zvm"]

@@ -11,6 +11,7 @@ from govulncheck_review import ReviewError, file_bytes, unique_object
 ROOT_MODULE = "github.com/Zenoglyphs-VM/zvm-core"
 NOTICE_DIRECTORY = "/usr/share/doc/zvm/notices"
 PREDEPLOY_NOTICE_PREFIX = "LICENSES/predeploys/"
+ALPINE_NOTICE_PREFIX = "LICENSES/alpine/"
 PROJECT_PREDEPLOYS = {"l2/predeploys/WrappedQSR.hex", "l2/predeploys/ZVMBridge.hex"}
 MAX_MANIFEST = 8 << 20
 MAX_INVENTORY = 2 << 20
@@ -79,6 +80,16 @@ def payload_rows(raw):
     return {name: {"bytes": size, "sha256": hashes[name]} for name, size in sizes.items()}
 
 
+def verify_catalog_files(module_notices, prefix, expected, scope):
+    collected = {path.removeprefix(prefix): row for path, row in module_notices.items() if path.startswith(prefix)}
+    require(collected.keys() == expected.keys(), f"image {scope} notice inventory differs from the catalog")
+    for name, pin in expected.items():
+        row = collected[name]
+        require(row["selectionScope"] == "MODULE_NOTICE_DIRECTORY"
+                and pin == {"bytes": row["bytes"], "sha256": row["sha256"]},
+                f"image {scope} notice differs from the checked source")
+
+
 def verify_predeploy_notices(project, embedded, module_notices):
     catalog_bytes = file_bytes(project / (PREDEPLOY_NOTICE_PREFIX + "sources.json"), 128 << 10)
     catalog = json.loads(catalog_bytes, object_pairs_hook=unique_object)
@@ -97,14 +108,7 @@ def verify_predeploy_notices(project, embedded, module_notices):
                 "predeploy license differs from its original byte pin")
         expected[name] = observed
 
-    collected = {path.removeprefix(PREDEPLOY_NOTICE_PREFIX): row for path, row in module_notices.items()
-                 if path.startswith(PREDEPLOY_NOTICE_PREFIX)}
-    require(collected.keys() == expected.keys(), "image predeploy notice inventory differs from the catalog")
-    for name, pin in expected.items():
-        row = collected[name]
-        require(row["selectionScope"] == "MODULE_NOTICE_DIRECTORY"
-                and pin == {"bytes": row["bytes"], "sha256": row["sha256"]},
-                "image predeploy notice differs from the checked source")
+    verify_catalog_files(module_notices, PREDEPLOY_NOTICE_PREFIX, expected, "predeploy")
 
     targets = catalog["predeploys"]
     third_party = {path: digest for path, digest in embedded.items()
@@ -124,7 +128,66 @@ def verify_predeploy_notices(project, embedded, module_notices):
             "legalReviewComplete": False}
 
 
-def verify_bundle(raw, observed, image, source, binary_sha256, project):
+def verify_alpine_notices(project, image, installed, module_notices):
+    catalog_bytes = file_bytes(project / (ALPINE_NOTICE_PREFIX + "sources.json"), 128 << 10)
+    catalog = json.loads(catalog_bytes, object_pairs_hook=unique_object)
+    require(catalog["schema"] == 1 and catalog["status"] == "APK_SOURCE_NOTICE_CANDIDATES_REVIEW_REQUIRED"
+            and all(catalog[key] is False for key in ("legalReviewComplete", "completeCorrespondingSource",
+                                                     "sourceOriginAuthenticated")),
+            "unexpected Alpine notice catalog scope")
+    profile = catalog["profile"]
+    dockerfile = file_bytes(project / "Dockerfile", 64 << 10).decode("ascii")
+    require(profile["os"] == image["os"] and profile["architecture"] == image["architecture"]
+            and re.fullmatch(r"alpine:\d+\.\d+\.\d+@sha256:[0-9a-f]{64}", profile["baseImage"])
+            and f'FROM {profile["baseImage"]}' in dockerfile.splitlines(),
+            "Alpine catalog profile differs from the selected image build")
+    require(catalog["installedPackages"] == installed, "Alpine catalog differs from installed package declarations")
+
+    by_origin = {}
+    for row in installed:
+        by_origin.setdefault(row["origin"], set()).add(row["declaredBuildCommit"])
+    origins = catalog["origins"]
+    require(isinstance(origins, dict) and 0 < len(origins) <= 512 and origins.keys() == by_origin.keys(),
+            "Alpine catalog recipe coverage differs from the installed origins")
+    objects = {}
+    gaps = []
+    occurrences = 0
+    for name, entry in origins.items():
+        recipe = entry["recipe"]
+        require(recipe["repository"] == "https://github.com/alpinelinux/aports"
+                and recipe["path"] == "main/" + name + "/APKBUILD"
+                and by_origin[name] == {recipe["commit"]} and DIGEST.fullmatch(recipe["sha256"])
+                and re.fullmatch(r"[0-9a-f]{40}", recipe["gitBlob"]),
+                "Alpine recipe pin differs from the installed origin")
+        candidates = entry["noticeCandidates"]
+        references = entry["referenceDocuments"]
+        require(isinstance(candidates, list) and isinstance(references, list)
+                and occurrences + len(candidates) + len(references) <= 1024,
+                "Alpine notice references exceed bounds")
+        if not candidates and not references:
+            gaps.append(name)
+        for row in candidates + references:
+            digest, count = row["sha256"], row["bytes"]
+            require(DIGEST.fullmatch(digest) and type(count) is int and 0 < count <= 128 << 10,
+                    "invalid original Alpine notice byte pin")
+            path = "objects/" + digest
+            pin = {"bytes": count, "sha256": digest}
+            if path not in objects:
+                require(len(objects) < 512, "Alpine notice objects exceed bounds")
+                content = file_bytes(project / (ALPINE_NOTICE_PREFIX + path), 128 << 10)
+                objects[path] = {"bytes": len(content), "sha256": sha256(content).hexdigest()}
+            require(objects[path] == pin, "Alpine notice differs from its original byte pin")
+            occurrences += 1
+    require(objects, "Alpine notice catalog has no candidate bytes")
+    catalog_pin = {"bytes": len(catalog_bytes), "sha256": sha256(catalog_bytes).hexdigest()}
+    verify_catalog_files(module_notices, ALPINE_NOTICE_PREFIX, {"sources.json": catalog_pin, **objects}, "Alpine")
+    return {"catalogSHA256": catalog_pin["sha256"], "installedPackages": len(installed),
+            "sourceOrigins": len(origins), "noticeObjects": len(objects), "noticeOccurrences": occurrences,
+            "noticeBytes": sum(row["bytes"] for row in objects.values()), "originsWithoutNoticeCandidates": sorted(gaps),
+            "legalReviewComplete": False, "completeCorrespondingSource": False}
+
+
+def verify_bundle(raw, observed, image, source, binary_sha256, project, installed):
     require(raw.endswith(b"\n") and len(raw) <= MAX_MANIFEST, "notice manifest is incomplete or oversized")
     manifest = json.loads(raw, object_pairs_hook=unique_object)
     require(manifest["schema"] == 2 and manifest["status"] == "SOURCE_NOTICE_BUNDLE_RECORDED_REVIEW_REQUIRED"
@@ -199,12 +262,13 @@ def verify_bundle(raw, observed, image, source, binary_sha256, project):
     require(manifest["entryPackage"] in packages and 0 < len(packages) <= 4096 and referenced == set(objects),
             "notice source object closure differs")
     predeploys = verify_predeploy_notices(project, project_embedded, required)
+    alpine = verify_alpine_notices(project, image, installed, required)
     return {"status": manifest["status"], "manifestSHA256": sha256(raw).hexdigest(),
             "manifestBytes": len(raw), "binarySHA256": binary_sha256, "selectedPackages": len(packages),
             "dependencyModules": len(modules) - 2, "selectedSourceFiles": source_files,
             "objectCount": len(objects), "objectBytes": sum(objects.values()),
             "sourceSupplements": supplements, "projectEmbeddedFiles": project_embedded,
-            "predeployNotices": predeploys,
+            "predeployNotices": predeploys, "runtimeAPKNotices": alpine,
             "modulesWithoutNoticeFiles": sorted(name for name, row in modules.items()
                 if row["noCandidateNoticeFileObserved"]),
             "readme": observed["README.txt"], "completeLicenseReview": False}

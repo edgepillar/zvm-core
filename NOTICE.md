@@ -23,3 +23,10 @@ digests, linked module identities and the CLI binary digest.
 The same image contains the license texts for the listed predeploys and their
 compiler input groups. The project entries in its manifest locate the original
 texts and the catalog by digest. [Predeploy source and license catalog](LICENSES/predeploys/sources.json)
+
+The Linux amd64 Alpine catalog identifies the installed APKs, their build
+recipe commits and selected original notices and reference texts. The
+project entries in the image manifest locate the catalog and its objects by
+digest. The APK declaration reader is adapted from zvm-node.
+[Alpine source and notice catalog](LICENSES/alpine/sources.json) ·
+[MIT notice](tools/noticebundle/LICENSE.zvm-node)

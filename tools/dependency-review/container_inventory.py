@@ -9,19 +9,22 @@ import re
 import subprocess
 import sys
 
+from apk_inventory import APK_DECLARATIONS_COMMAND, WGET_PROBE_COMMAND, WGET_PROBE_RESULT, apk_licenses
 from container_notices import MANIFEST_COMMAND, MAX_INVENTORY, MAX_MANIFEST, PAYLOAD_COMMAND, payload_rows, verify_bundle
 from govulncheck_review import ReviewError, file_bytes, run_bounded, save, source_binding
 
 
 IMAGE_TEMPLATE = ('{"id":{{json .Id}},"os":{{json .Os}},'
                   '"architecture":{{json .Architecture}},'
-                  '"entrypoint":{{json .Config.Entrypoint}},"user":{{json (index .Config "User")}}}')
+                  '"entrypoint":{{json .Config.Entrypoint}},"user":{{json (index .Config "User")}},'
+                  '"reportedSizeBytes":{{json .Size}}}')
 
 
 def image_projection(raw):
     image = json.loads(raw)
     if (not re.fullmatch(r"sha256:[0-9a-f]{64}", image["id"]) or image["os"] != "linux" or
-            image["entrypoint"] != ["zvm"]):
+            image["entrypoint"] != ["zvm"] or type(image["reportedSizeBytes"]) is not int
+            or image["reportedSizeBytes"] <= 0):
         raise ReviewError("unexpected CI image identity or entrypoint")
     user_present = image["user"] is not None
     if not user_present:
@@ -72,17 +75,24 @@ def main():
                   "--cap-drop=ALL", "--security-opt=no-new-privileges"]
         packages = run("packages", common + ["--entrypoint=/sbin/apk", image["id"], "info", "-v"]).decode().splitlines()
         if (not 1 <= len(packages) <= 512 or len(set(packages)) != len(packages) or
-                not {"ca-certificates-20261020-r0", "wget-1.25.0-r1"} <= set(packages) or
+                "ca-certificates-20261020-r0" not in packages or any(name.startswith("wget-") for name in packages) or
                 any(not re.fullmatch(r"[A-Za-z0-9_.+~-]+", item) for item in packages)):
             raise ReviewError("unexpected installed package inventory")
         digest = run("binary", common + ["--entrypoint=/bin/busybox", image["id"], "sha256sum", "/usr/local/bin/zvm"]).decode().split()
         if len(digest) != 2 or not re.fullmatch(r"[0-9a-f]{64}", digest[0]) or digest[1] != "/usr/local/bin/zvm":
             raise ReviewError("invalid CLI binary digest")
-        notice_command = common + ["--entrypoint=/bin/busybox", image["id"], "sh", "-ec"]
-        manifest = run("notice_manifest", notice_command + [MANIFEST_COMMAND], MAX_MANIFEST)
-        inventory = run("notice_objects", notice_command + [PAYLOAD_COMMAND], MAX_INVENTORY)
+        image_shell = common + ["--entrypoint=/bin/busybox", image["id"], "sh", "-ec"]
+        declarations = run("apk_declarations", image_shell + [APK_DECLARATIONS_COMMAND], 2 << 20)
+        installed = apk_licenses(declarations, packages)
+        probe = run("wget_loopback", image_shell + [WGET_PROBE_COMMAND], 4096)
+        if probe != WGET_PROBE_RESULT:
+            raise ReviewError("unexpected BusyBox wget loopback result")
+        receipt["busyboxWget"] = {"provider": "/bin/busybox", "loopbackHTTPBodyMatched": True}
+        receipt["runtimeAPKLicenseDeclarations"] = installed
+        manifest = run("notice_manifest", image_shell + [MANIFEST_COMMAND], MAX_MANIFEST)
+        inventory = run("notice_objects", image_shell + [PAYLOAD_COMMAND], MAX_INVENTORY)
         phase = "notice_binding"
-        notices = verify_bundle(manifest, payload_rows(inventory), image, before, digest[0], Path.cwd())
+        notices = verify_bundle(manifest, payload_rows(inventory), image, before, digest[0], Path.cwd(), installed)
         receipt["sourceNotices"] = notices
         phase = "source_after"
         if source_binding(args.source_commit) != before:
@@ -101,6 +111,9 @@ def main():
     summary = {"status": receipt["status"], "exit": result, "completeSBOM": False,
                "imageUserFieldPresent": receipt.get("imageUserFieldPresent"),
                "releaseAccepted": False, "sourceNotices": receipt.get("sourceNotices")}
+    if not result:
+        summary.update(image=receipt["image"], installedPackages=receipt["installedPackages"],
+                       busyboxWget=receipt["busyboxWget"])
     if result:
         summary.update(failureStage=receipt["failureStage"], errorType=receipt["errorType"],
                        failureReason=receipt.get("failureReason"))

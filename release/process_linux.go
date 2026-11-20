@@ -26,6 +26,15 @@ type runtimeIdentity struct {
 	mtime, ctime       unix.StatxTimestamp
 }
 
+type processFilesSnapshot struct {
+	root  runtimeIdentity
+	files []runtimeIdentity
+}
+
+func sameRuntimeRoot(a, b runtimeIdentity) bool {
+	return a.mount == b.mount && a.inode == b.inode && a.deviceMajor == b.deviceMajor && a.deviceMinor == b.deviceMinor
+}
+
 func runtimeFileIdentity(fd int) (runtimeIdentity, error) {
 	const mask = unix.STATX_TYPE | unix.STATX_INO | unix.STATX_SIZE | unix.STATX_MTIME | unix.STATX_CTIME | unix.STATX_MNT_ID
 	var stat unix.Statx_t
@@ -172,7 +181,10 @@ func verifyJobOutputFile(fd int, found runtimeIdentity, pin processPin) error {
 	return nil
 }
 
-func verifyProcessFiles(ctx context.Context, snapshot dockerSnapshot, pins []processPin, recheck func() error) error {
+func verifyProcessFiles(ctx context.Context, snapshot dockerSnapshot, pins []processPin, recheck func() error, evidence *processFilesSnapshot) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	proc, err := unix.Open("/proc", pathFlags|unix.O_DIRECTORY|unix.O_NOFOLLOW, 0)
 	if err != nil {
 		return errors.New("local procfs could not be opened")
@@ -210,8 +222,15 @@ func verifyProcessFiles(ctx context.Context, snapshot dockerSnapshot, pins []pro
 	if err != nil {
 		return err
 	}
+	confirming := evidence != nil && evidence.files != nil
+	if confirming && (len(pins) != len(evidence.files) || !sameRuntimeRoot(rootIdentity, evidence.root)) {
+		return errors.New("the process filesystem view changed since hashing")
+	}
 	identities := make([]runtimeIdentity, len(pins))
-	buffer := make([]byte, 128<<10)
+	var buffer []byte
+	if !confirming {
+		buffer = make([]byte, 128<<10)
+	}
 	for i, pin := range pins {
 		fd, err := openProcessFile(dir, root, pin.path)
 		if err != nil {
@@ -225,7 +244,11 @@ func verifyProcessFiles(ctx context.Context, snapshot dockerSnapshot, pins []pro
 			err = verifyJobOutputFile(fd, found, pin)
 		}
 		if err == nil {
-			err = hashProcessFile(ctx, proc, fd, pin.file, found, buffer)
+			if !confirming {
+				err = hashProcessFile(ctx, proc, fd, pin.file, found, buffer)
+			} else if found != evidence.files[i] {
+				err = fmt.Errorf("runtime file %s changed since hashing", pin.file.ID)
+			}
 		}
 		unix.Close(fd)
 		if err != nil {
@@ -245,8 +268,7 @@ func verifyProcessFiles(ctx context.Context, snapshot dockerSnapshot, pins []pro
 	}
 	defer unix.Close(currentRoot)
 	currentIdentity, err := runtimeFileIdentity(currentRoot)
-	if err != nil || currentIdentity.mount != rootIdentity.mount || currentIdentity.inode != rootIdentity.inode ||
-		currentIdentity.deviceMajor != rootIdentity.deviceMajor || currentIdentity.deviceMinor != rootIdentity.deviceMinor {
+	if err != nil || !sameRuntimeRoot(currentIdentity, rootIdentity) {
 		return errors.New("the process filesystem view changed during verification")
 	}
 	for i, pin := range pins {
@@ -263,5 +285,11 @@ func verifyProcessFiles(ctx context.Context, snapshot dockerSnapshot, pins []pro
 			return fmt.Errorf("runtime file %s changed during verification", pin.file.ID)
 		}
 	}
-	return activeProcess(pidfd)
+	if err := activeProcess(pidfd); err != nil {
+		return err
+	}
+	if evidence != nil && !confirming {
+		*evidence = processFilesSnapshot{root: rootIdentity, files: identities}
+	}
+	return nil
 }

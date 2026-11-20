@@ -204,7 +204,7 @@ func (m Manifest) ObserveProcess(parent context.Context, p Policy, s Signatures,
 	if err != nil {
 		return result, err
 	}
-	return observePinnedProcess(ctx, target, image, snapshot, policy, pins)
+	return observePinnedProcess(ctx, target, image, snapshot, policy, pins, nil)
 }
 
 func confirmDockerProcess(ctx context.Context, target ImageTarget, image ImageObservation, snapshot dockerSnapshot) error {
@@ -215,7 +215,7 @@ func confirmDockerProcess(ctx context.Context, target ImageTarget, image ImageOb
 	return nil
 }
 
-func observePinnedProcess(ctx context.Context, target ImageTarget, image ImageObservation, snapshot dockerSnapshot, policy string, pins []processPin) (ProcessObservation, error) {
+func observePinnedProcess(ctx context.Context, target ImageTarget, image ImageObservation, snapshot dockerSnapshot, policy string, pins []processPin, evidence *processFilesSnapshot) (ProcessObservation, error) {
 	var result ProcessObservation
 	startedAt, err := time.Parse(time.RFC3339Nano, snapshot.StartedAt)
 	if err != nil || startedAt.IsZero() || snapshot.PID <= 0 {
@@ -224,7 +224,7 @@ func observePinnedProcess(ctx context.Context, target ImageTarget, image ImageOb
 	recheck := func() error {
 		return confirmDockerProcess(ctx, target, image, snapshot)
 	}
-	if err := verifyProcessFiles(ctx, snapshot, pins, recheck); err != nil {
+	if err := verifyProcessFiles(ctx, snapshot, pins, recheck, evidence); err != nil {
 		return result, err
 	}
 	var mounted, outputs int

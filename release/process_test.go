@@ -114,7 +114,7 @@ func checkProcessFixture(t *testing.T, f *fixture, target ImageTarget, executabl
 		}
 		err = verifyProcessFiles(t.Context(), snapshot, pins, func() error {
 			return os.WriteFile(configPath, []byte("mode=fail\n"), 0600)
-		})
+		}, nil)
 		if err == nil || !strings.Contains(err.Error(), "changed during verification") {
 			t.Fatalf("changed mount contents were accepted: %v", err)
 		}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+
+	"github.com/Zenoglyphs-VM/zvm-core/rollup"
 )
 
 type Receipt struct {
@@ -35,33 +37,39 @@ func (m Manifest) VerifyWithL1Genesis(ctx context.Context, p Policy, s Signature
 }
 
 func (m Manifest) verify(ctx context.Context, p Policy, s Signatures, k TrustedKeys, filesRoot, sourcesRoot, l1Verifier string) (Receipt, error) {
-	var r Receipt
 	count, err := m.VerifySignatures(p, s, k)
 	if err != nil {
-		return r, err
+		return Receipt{}, err
 	}
+	receipt, _, err := m.verifyInputs(ctx, count, filesRoot, sourcesRoot, l1Verifier)
+	return receipt, err
+}
+
+func (m Manifest) verifyInputs(ctx context.Context, count int, filesRoot, sourcesRoot, l1Verifier string) (Receipt, *rollup.Config, error) {
+	var r Receipt
 	files, err := m.VerifyFiles(filesRoot)
 	if err != nil {
-		return r, err
+		return r, nil, err
 	}
-	if err := m.verifyEpochFiles(ctx, filesRoot, l1Verifier); err != nil {
-		return r, err
+	cfg, err := m.verifyEpochFiles(ctx, filesRoot, l1Verifier)
+	if err != nil {
+		return r, nil, err
 	}
 	repos, err := m.VerifySources(ctx, sourcesRoot)
 	if err != nil {
-		return r, err
+		return r, nil, err
 	}
 	builds, err := m.VerifyContractBuilds(filesRoot, sourcesRoot)
 	if err != nil {
-		return r, err
+		return r, nil, err
 	}
 	manifest, err := m.Fingerprint()
 	if err != nil {
-		return r, err
+		return r, nil, err
 	}
 	epoch, err := m.EpochFingerprint()
 	if err != nil {
-		return r, err
+		return r, nil, err
 	}
 	genesis := "L2 construction"
 	if l1Verifier != "" {
@@ -72,5 +80,5 @@ func (m Manifest) verify(ctx context.Context, p Policy, s Signatures, k TrustedK
 		VerifiedRepositories: repos, VerifiedFiles: files, VerifiedL1Genesis: l1Verifier != "",
 		VerifiedContractBuilds: builds,
 		Scope:                  "offline signed inventory, file bytes, " + genesis + ", Git snapshots and declared saved build consistency",
-	}, nil
+	}, cfg, nil
 }

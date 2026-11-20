@@ -168,36 +168,47 @@ func (m Manifest) observeExecution(ctx context.Context, clients [2]*rpc.Client, 
 	return ObservedBlock{Height: height, Hash: block.Hex()}, nil
 }
 
+func (targets ChainTargets) validate() error {
+	if targets.L1Height < 2 || targets.L2Height == 0 {
+		return errors.New("chain observation requires a post-genesis height on both layers")
+	}
+	if err := observerEndpoints(targets.L1); err != nil {
+		return err
+	}
+	if err := observerEndpoints(targets.L2); err != nil {
+		return err
+	}
+	if targets.NodeEpoch != ([2]string{}) || targets.FilesRoot != "" {
+		if targets.FilesRoot == "" {
+			return errors.New("node epoch observation requires both endpoint URLs and the signed files root")
+		}
+		return observerEndpoints(targets.NodeEpoch)
+	}
+	return nil
+}
+
 // ObserveChain verifies the release signature quorum before contacting the
 // operator-selected RPC endpoints. Only chain identity and state reads are used.
 func (m Manifest) ObserveChain(parent context.Context, p Policy, s Signatures, k TrustedKeys, targets ChainTargets) (ChainObservation, error) {
-	var result ChainObservation
 	count, err := m.VerifySignatures(p, s, k)
 	if err != nil {
-		return result, err
+		return ChainObservation{}, err
 	}
-	if targets.L1Height < 2 || targets.L2Height == 0 {
-		return result, errors.New("chain observation requires a post-genesis height on both layers")
-	}
-	if err := observerEndpoints(targets.L1); err != nil {
-		return result, err
-	}
-	if err := observerEndpoints(targets.L2); err != nil {
-		return result, err
+	if err := targets.validate(); err != nil {
+		return ChainObservation{}, err
 	}
 	var nodeEpoch nodeEpochObservation
-	if targets.NodeEpoch != ([2]string{}) || targets.FilesRoot != "" {
-		if targets.FilesRoot == "" {
-			return result, errors.New("node epoch observation requires both endpoint URLs and the signed files root")
-		}
-		if err := observerEndpoints(targets.NodeEpoch); err != nil {
-			return result, err
-		}
+	if targets.FilesRoot != "" {
 		nodeEpoch, err = m.expectedNodeEpoch(targets.FilesRoot)
 		if err != nil {
-			return result, err
+			return ChainObservation{}, err
 		}
 	}
+	return m.observeChain(parent, count, targets, nodeEpoch)
+}
+
+func (m Manifest) observeChain(parent context.Context, count int, targets ChainTargets, nodeEpoch nodeEpochObservation) (ChainObservation, error) {
+	var result ChainObservation
 	manifest, err := m.Fingerprint()
 	if err != nil {
 		return result, err

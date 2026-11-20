@@ -119,20 +119,31 @@ func matchServiceInventory(members []composeMember, inventory runtimeInventory) 
 	return nil
 }
 
+func (target ServicesTarget) validate() error {
+	if runtime.GOOS != "linux" {
+		return errors.New("service observation requires the Linux Docker host")
+	}
+	if !identifier.MatchString(target.Project) || target.DockerContext == "" || target.OCIRoot == "" || target.FilesRoot == "" {
+		return errors.New("Compose project, Docker context, OCI root and signed files root are required")
+	}
+	return nil
+}
+
 // ObserveServices authenticates and checks the signed running service and
 // completed job inventories in one Compose project.
 func (m Manifest) ObserveServices(parent context.Context, p Policy, s Signatures, k TrustedKeys, target ServicesTarget) (ServicesObservation, error) {
-	var result ServicesObservation
 	count, err := m.VerifySignatures(p, s, k)
 	if err != nil {
-		return result, err
+		return ServicesObservation{}, err
 	}
-	if runtime.GOOS != "linux" {
-		return result, errors.New("service observation requires the Linux Docker host")
+	if err := target.validate(); err != nil {
+		return ServicesObservation{}, err
 	}
-	if !identifier.MatchString(target.Project) || target.DockerContext == "" || target.OCIRoot == "" || target.FilesRoot == "" {
-		return result, errors.New("Compose project, Docker context, OCI root and signed files root are required")
-	}
+	return m.observeServices(parent, count, target, nil)
+}
+
+func (m Manifest) observeServices(parent context.Context, count int, target ServicesTarget, observeChain func(context.Context) error) (ServicesObservation, error) {
+	var result ServicesObservation
 	inventory, err := m.runtimeInventory(target.FilesRoot)
 	if err != nil {
 		return result, err
@@ -150,6 +161,8 @@ func (m Manifest) ObserveServices(parent context.Context, p Policy, s Signatures
 		target   ImageTarget
 		image    ImageObservation
 		snapshot dockerSnapshot
+		pins     []processPin
+		files    *processFilesSnapshot
 	}
 	type checkedJob struct {
 		target           ImageTarget
@@ -215,11 +228,15 @@ func (m Manifest) ObserveServices(parent context.Context, p Policy, s Signatures
 		if snapshot.Project != target.Project || snapshot.Service != member.Service {
 			return result, errors.New("Compose container labels changed during service observation")
 		}
-		process, err := observePinnedProcess(ctx, selected, image, snapshot, inventory.policySHA256, service.files)
+		var files *processFilesSnapshot
+		if observeChain != nil {
+			files = &processFilesSnapshot{}
+		}
+		process, err := observePinnedProcess(ctx, selected, image, snapshot, inventory.policySHA256, service.files, files)
 		if err != nil {
 			return result, fmt.Errorf("service %s: %w", member.Service, err)
 		}
-		checked = append(checked, checkedContainer{target: selected, image: image, snapshot: snapshot})
+		checked = append(checked, checkedContainer{target: selected, image: image, snapshot: snapshot, pins: service.files, files: files})
 		role := observed[member.Service]
 		role.Name, role.Replicas = member.Service, role.Replicas+1
 		role.ImageID, role.Platform = image.ImageID, image.Platform
@@ -233,7 +250,19 @@ func (m Manifest) ObserveServices(parent context.Context, p Policy, s Signatures
 		}
 		observed[member.Service] = role
 	}
+	if observeChain != nil {
+		if err := observeChain(ctx); err != nil {
+			return result, err
+		}
+	}
 	for _, entry := range checked {
+		if entry.files != nil {
+			recheck := func() error { return confirmDockerProcess(ctx, entry.target, entry.image, entry.snapshot) }
+			if err := verifyProcessFiles(ctx, entry.snapshot, entry.pins, recheck, entry.files); err != nil {
+				return result, fmt.Errorf("service %s changed during chain observation: %w", entry.snapshot.Service, err)
+			}
+			continue
+		}
 		if err := confirmDockerProcess(ctx, entry.target, entry.image, entry.snapshot); err != nil {
 			return result, err
 		}

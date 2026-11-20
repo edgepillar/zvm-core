@@ -342,4 +342,7 @@ func TestReleaseImageObservationAgainstDockerEngine(t *testing.T) {
 	t.Run("signed job output volumes", func(t *testing.T) {
 		checkJobOutputsFixture(t, *image, tag, project+"-outputs", root, executable)
 	})
+	t.Run("signed candidate verification", func(t *testing.T) {
+		checkCandidateFixture(t, *image, tag, project+"-candidate", root, executable)
+	})
 }

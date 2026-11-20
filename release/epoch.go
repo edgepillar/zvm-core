@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/Zenoglyphs-VM/zvm-core/l2"
+	"github.com/Zenoglyphs-VM/zvm-core/rollup"
 )
 
 type DeploymentBindings struct {
@@ -53,16 +54,17 @@ func genesisHash(g *core.Genesis) (hash common.Hash, err error) {
 // VerifyEpochFiles binds configuration, the L2 genesis construction and
 // declared runtime bytecode.
 func (m Manifest) VerifyEpochFiles(directory string) error {
-	return m.verifyEpochFiles(context.Background(), directory, "")
+	_, err := m.verifyEpochFiles(context.Background(), directory, "")
+	return err
 }
 
-func (m Manifest) verifyEpochFiles(ctx context.Context, directory, l1Verifier string) error {
+func (m Manifest) verifyEpochFiles(ctx context.Context, directory, l1Verifier string) (*rollup.Config, error) {
 	if err := m.validate(); err != nil {
-		return err
+		return nil, err
 	}
 	root, err := openDirectory(directory)
 	if err != nil {
-		return errors.New("epoch file root could not be opened")
+		return nil, errors.New("epoch file root could not be opened")
 	}
 	defer root.Close()
 	byID, byKind := map[string]File{}, map[string]File{}
@@ -72,41 +74,41 @@ func (m Manifest) verifyEpochFiles(ctx context.Context, directory, l1Verifier st
 	}
 	raw, err := readPin(root, byKind["rollup"], MaxDocumentBytes)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	cfg, err := m.BindConfiguration(raw)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	raw, err = readPin(root, byKind["l2-genesis"], 16<<20)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if compilerJSON(raw, 16<<20) != nil {
-		return errors.New("L2 genesis JSON is ambiguous or exceeds its structure bounds")
+		return nil, errors.New("L2 genesis JSON is ambiguous or exceeds its structure bounds")
 	}
 	var g core.Genesis
 	if json.Unmarshal(raw, &g) != nil || g.Config == nil || !reflect.DeepEqual(g.Config, l2.ChainConfig(cfg)) {
-		return errors.New("L2 genesis execution rules disagree with the rollup")
+		return nil, errors.New("L2 genesis execution rules disagree with the rollup")
 	}
 	expected, err := l2.BuildGenesis(cfg, cfg.L2GenesisTimestamp)
 	if err != nil {
-		return errors.New("supported genesis construction failed")
+		return nil, errors.New("supported genesis construction failed")
 	}
 	actualHash, err := genesisHash(&g)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if actualHash != cfg.L2GenesisHash || actualHash != expected.ToBlock().Hash() {
-		return errors.New("L2 genesis block hash disagrees with the rollup or supported construction")
+		return nil, errors.New("L2 genesis block hash disagrees with the rollup or supported construction")
 	}
 	raw, err = readPin(root, byKind["deployments"], MaxDocumentBytes)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var deployment DeploymentBindings
 	if decode(raw, &deployment) != nil || deployment.Schema != Schema {
-		return errors.New("invalid pinned deployment bindings")
+		return nil, errors.New("invalid pinned deployment bindings")
 	}
 	declared := slices.Clone(m.Contracts)
 	slices.SortFunc(declared, func(a, b Contract) int { return strings.Compare(a.ID, b.ID) })
@@ -114,32 +116,32 @@ func (m Manifest) verifyEpochFiles(ctx context.Context, directory, l1Verifier st
 	a, _ := json.Marshal(declared)
 	b, _ := json.Marshal(deployment.Contracts)
 	if !bytes.Equal(a, b) {
-		return errors.New("deployment bindings disagree with the manifest")
+		return nil, errors.New("deployment bindings disagree with the manifest")
 	}
 	for _, c := range m.Contracts {
 		raw, err := readPin(root, byID[c.RuntimeFile], 8<<20)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		text := strings.TrimSpace(string(raw))
 		text = strings.TrimPrefix(text, "0x")
 		code, err := hex.DecodeString(text)
 		if err != nil || len(code) == 0 || strings.ToLower(crypto.Keccak256Hash(code).Hex()) != c.RuntimeCodeHash {
-			return errors.New("contract runtime-code hash mismatch")
+			return nil, errors.New("contract runtime-code hash mismatch")
 		}
 		// Genesis predeploys also have to be the code the L2 genesis carries.
 		if account, ok := g.Alloc[common.HexToAddress(c.Address)]; ok && !bytes.Equal(account.Code, code) {
-			return errors.New("declared predeploy code disagrees with genesis")
+			return nil, errors.New("declared predeploy code disagrees with genesis")
 		}
 	}
 	if l1Verifier != "" {
 		raw, err := readPin(root, byKind["l1-genesis"], maxL1GenesisBytes)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if err := m.verifyL1Genesis(ctx, raw, l1Verifier); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return cfg, nil
 }

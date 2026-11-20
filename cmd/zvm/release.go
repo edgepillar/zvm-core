@@ -122,6 +122,17 @@ func releaseVerify(args []string, w io.Writer) error {
 	return json.NewEncoder(w).Encode(receipt)
 }
 
+func bindChainTargets(fs *flag.FlagSet, targets *release.ChainTargets) {
+	fs.StringVar(&targets.L1[0], "l1-rpc", "", "primary NoM RPC URL")
+	fs.StringVar(&targets.L1[1], "l1-witness-rpc", "", "independently selected NoM RPC URL")
+	fs.StringVar(&targets.L2[0], "l2-rpc", "", "primary execution RPC URL")
+	fs.StringVar(&targets.L2[1], "l2-witness-rpc", "", "independently selected execution RPC URL")
+	fs.Uint64Var(&targets.L1Height, "l1-height", 0, "NoM momentum height to compare")
+	fs.Uint64Var(&targets.L2Height, "l2-height", 0, "execution block number to compare")
+	fs.StringVar(&targets.NodeEpoch[0], "node-epoch-url", "", "primary node's loaded epoch endpoint")
+	fs.StringVar(&targets.NodeEpoch[1], "node-witness-epoch-url", "", "independently selected node's loaded epoch endpoint")
+}
+
 func releaseObserveChain(args []string, w io.Writer) error {
 	fs := flag.NewFlagSet("release-observe-chain", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -129,15 +140,9 @@ func releaseObserveChain(args []string, w io.Writer) error {
 	policy := fs.String("policy", "", "independently reviewed release inventory")
 	signatures := fs.String("signatures", "", "detached signature envelope")
 	keys := fs.String("trusted-keys", "", "independently provisioned public-key inventory")
-	l1 := fs.String("l1-rpc", "", "primary NoM RPC URL")
-	l1Witness := fs.String("l1-witness-rpc", "", "independently selected NoM RPC URL")
-	l2 := fs.String("l2-rpc", "", "primary execution RPC URL")
-	l2Witness := fs.String("l2-witness-rpc", "", "independently selected execution RPC URL")
-	l1Height := fs.Uint64("l1-height", 0, "NoM momentum height to compare")
-	l2Height := fs.Uint64("l2-height", 0, "execution block number to compare")
-	nodeEpoch := fs.String("node-epoch-url", "", "primary node's loaded epoch endpoint")
-	nodeWitness := fs.String("node-witness-epoch-url", "", "independently selected node's loaded epoch endpoint")
-	filesRoot := fs.String("files-root", "", "signed files root for node epoch verification")
+	var targets release.ChainTargets
+	bindChainTargets(fs, &targets)
+	fs.StringVar(&targets.FilesRoot, "files-root", "", "signed files root for node epoch verification")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -148,11 +153,7 @@ func releaseObserveChain(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	observation, err := m.ObserveChain(context.Background(), p, s, k, release.ChainTargets{
-		L1: [2]string{*l1, *l1Witness}, L2: [2]string{*l2, *l2Witness},
-		L1Height: *l1Height, L2Height: *l2Height,
-		NodeEpoch: [2]string{*nodeEpoch, *nodeWitness}, FilesRoot: *filesRoot,
-	})
+	observation, err := m.ObserveChain(context.Background(), p, s, k, targets)
 	if err != nil {
 		return err
 	}

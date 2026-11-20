@@ -184,6 +184,38 @@ Node reports describe the configuration loaded for derivation. Host and
 container identity, runtime configuration changes and finality remain
 subject to independent observation.
 
+## Candidate verification
+
+`release-verify-candidate` verifies one signed manifest with its source,
+file, genesis and saved build inputs, then observes its Docker services,
+completed jobs and chain state. The observer supplies the source and file
+roots, a trusted NoM genesis verifier, the local Docker project and OCI blobs,
+and independent endpoints for the chain and loaded configuration checks.
+
+```sh
+zvm release-verify-candidate \
+  -manifest manifest.json -policy policy.json \
+  -signatures signatures.json -trusted-keys trusted-keys.json \
+  -files-root release-inputs -sources-root release-sources \
+  -l1-genesis-verifier "$NOM_GENESIS_VERIFIER" \
+  -project "$COMPOSE_PROJECT" -docker-context "$DOCKER_CONTEXT" -oci-root "$OCI_ROOT" \
+  -l1-rpc "$L1_PRIMARY" -l1-witness-rpc "$L1_WITNESS" -l1-height "$L1_HEIGHT" \
+  -l2-rpc "$L2_PRIMARY" -l2-witness-rpc "$L2_WITNESS" -l2-height "$L2_HEIGHT" \
+  -node-epoch-url "$NODE_EPOCH" -node-witness-epoch-url "$NODE_WITNESS_EPOCH"
+```
+
+The observer verifies signatures once and uses the rollup configuration
+parsed during offline verification for the Node checks. It reads the signed
+process files before contacting chain witnesses and confirms the same file
+and mount identities, processes, job records and inventory when those reads
+finish. Confirmation uses metadata from the hashed files. A failed stage
+prevents the candidate record. The record carries matching manifest and
+epoch digests for the offline, Docker and chain observations.
+
+The observer verifies the identity and independence of the selected
+endpoints. Production finality, historical job writes, child process
+coverage and owner acceptance require their own evidence.
+
 ## Docker image observations
 
 An observer can verify the image selected by a running Docker container

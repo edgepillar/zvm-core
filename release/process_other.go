@@ -7,6 +7,8 @@ import (
 	"errors"
 )
 
-func verifyProcessFiles(context.Context, dockerSnapshot, []processPin, func() error) error {
+type processFilesSnapshot struct{}
+
+func verifyProcessFiles(context.Context, dockerSnapshot, []processPin, func() error, *processFilesSnapshot) error {
 	return errors.New("process observation requires the Linux Docker host")
 }

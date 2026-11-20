@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"slices"
+
+	"github.com/Zenoglyphs-VM/zvm-core/rollup"
 )
 
 const nodeEpochSchema = 1
@@ -37,9 +39,13 @@ func (m Manifest) expectedNodeEpoch(directory string) (nodeEpochObservation, err
 	if err != nil {
 		return result, err
 	}
+	return m.nodeEpochForConfiguration(cfg)
+}
+
+func (m Manifest) nodeEpochForConfiguration(cfg *rollup.Config) (nodeEpochObservation, error) {
 	loaded, err := json.Marshal(cfg)
 	if err != nil {
-		return result, errors.New("could not fingerprint the parsed rollup configuration")
+		return nodeEpochObservation{}, errors.New("could not fingerprint the parsed rollup configuration")
 	}
 	return nodeEpochObservation{
 		Schema: nodeEpochSchema, L1ChainID: m.Epoch.L1ChainID, L2ChainID: m.Epoch.L2ChainID,

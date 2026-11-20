@@ -367,6 +367,22 @@ release reviewers the source locations for the recorded package selection.
 Complete corresponding-source delivery remains open.
 [Alpine build source index](../LICENSES/alpine/build-sources.json)
 
+The source delivery checker reads the selected files from a prepared directory.
+Use `aports/main/<origin>/<file>` for each pinned Git tree entry and
+`sources/<origin>/<name>` for external recipe inputs. Store a Git symbolic
+link's literal target bytes in a regular file and keep its mode in the index.
+Use the catalog and source index for the image being reviewed.
+
+```sh
+python3 -B tools/dependency-review/apk_source_delivery.py /path/to/prepared-sources
+```
+
+The checker recomputes Git blob IDs for recipe files and install hooks. It
+also verifies the available recipe checksums, including those for external
+archives. Its report gives the verified file and byte counts for the selected
+index. Release maintainers still need to review the final distribution,
+publisher trust and license obligations.
+
 Alpine baselayout installs the protocols and services tables from Debian
 netbase 6.4. Both tables match the recipe's retained input hashes. The catalog
 includes Debian's original notice for those inputs and the GNU GPL version 2

@@ -69,7 +69,7 @@ def recipe_sources(index, origin, entry, entries):
     rows = index["sources"]
     require(isinstance(rows, list) and len(rows) == entry["reviewedRecipeInputs"] <= 256,
             "APK recipe source count differs")
-    sources, local = {}, set()
+    sources, local = {}, {}
     prefix = RAW_APORTS + entry["recipe"]["commit"] + "/main/" + origin + "/"
     for row in rows:
         name, kind, url = row["name"], row["kind"], row["url"]
@@ -82,9 +82,9 @@ def recipe_sources(index, origin, entry, entries):
             require(url.startswith(prefix) and relative in entries and relative not in local
                     and relative != "APKBUILD" and entries[relative]["mode"] in REGULAR_MODES,
                     "APK source does not match the pinned recipe directory")
-            local.add(relative)
+            local[relative] = row
         sources[name] = row
-    return sources, len(local)
+    return sources, local
 
 
 def verify_notice_sources(notices, sources):
@@ -107,7 +107,7 @@ def verify_notice_sources(notices, sources):
             raise ReviewError("unknown APK notice source association")
 
 
-def verify_source_index(raw, catalog):
+def checked_source_index(raw, catalog):
     pin = {"bytes": len(raw), "sha256": sha256(raw).hexdigest()}
     require(0 < len(raw) <= 128 << 10 and pin == catalog["buildSourceIndex"],
             "APK source index differs from the catalog pin")
@@ -116,14 +116,23 @@ def verify_source_index(raw, catalog):
             and data["sourceInventory"] == catalog["sourceInventory"]
             and isinstance(data["origins"], dict)
             and data["origins"].keys() == catalog["origins"].keys(), "APK source index scope differs")
+    return pin["sha256"], data["origins"]
+
+
+def checked_recipe(origin, index, catalog_entry):
+    entries = recipe_entries(index, catalog_entry["recipe"])
+    sources, local = recipe_sources(index, origin, catalog_entry, entries)
+    verify_notice_sources(catalog_entry["noticeCandidates"], sources)
+    return entries, sources, local
+
+
+def verify_source_index(raw, catalog):
+    digest, origins = checked_source_index(raw, catalog)
     counts = {"recipeInputs": 0, "aportsTreeEntries": 0, "additionalPackagingEntries": 0, "gitLinks": 0}
     for origin, entry in catalog["origins"].items():
-        scope = data["origins"][origin]
-        entries = recipe_entries(scope, entry["recipe"])
-        sources, local = recipe_sources(scope, origin, entry, entries)
-        verify_notice_sources(entry["noticeCandidates"], sources)
+        entries, sources, local = checked_recipe(origin, origins[origin], entry)
         counts["recipeInputs"] += len(sources)
         counts["aportsTreeEntries"] += len(entries)
-        counts["additionalPackagingEntries"] += len(entries) - local - 1
+        counts["additionalPackagingEntries"] += len(entries) - len(local) - 1
         counts["gitLinks"] += sum(row["mode"] == GIT_LINK for row in entries.values())
-    return {"indexSHA256": pin["sha256"], **counts}
+    return {"indexSHA256": digest, **counts}

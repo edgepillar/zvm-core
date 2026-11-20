@@ -130,6 +130,33 @@ def verify_predeploy_notices(project, embedded, module_notices):
             "legalReviewComplete": False}
 
 
+def alpine_notice_pins(origins):
+    objects = {}
+    gaps = []
+    occurrences = 0
+    for name, entry in origins.items():
+        candidates = entry["noticeCandidates"]
+        references = entry["referenceDocuments"]
+        require(isinstance(candidates, list) and isinstance(references, list)
+                and occurrences + len(candidates) + len(references) <= 1024,
+                "Alpine notice references exceed bounds")
+        if not candidates and not references:
+            gaps.append(name)
+        for row in candidates + references:
+            digest, count = row["sha256"], row["bytes"]
+            require(DIGEST.fullmatch(digest) and type(count) is int and 0 < count <= 128 << 10,
+                    "invalid original Alpine notice byte pin")
+            path = "objects/" + digest
+            pin = {"bytes": count, "sha256": digest}
+            if path not in objects:
+                require(len(objects) < 512, "Alpine notice objects exceed bounds")
+                objects[path] = pin
+            require(objects[path] == pin, "Alpine notice differs from its original byte pin")
+            occurrences += 1
+    require(objects, "Alpine notice catalog has no candidate bytes")
+    return objects, gaps, occurrences
+
+
 def verify_alpine_notices(project, image, installed, module_notices):
     catalog_bytes = file_bytes(project / (ALPINE_NOTICE_PREFIX + "sources.json"), 128 << 10)
     catalog = json.loads(catalog_bytes, object_pairs_hook=unique_object)
@@ -150,9 +177,6 @@ def verify_alpine_notices(project, image, installed, module_notices):
     origins = catalog["origins"]
     require(isinstance(origins, dict) and 0 < len(origins) <= 512 and origins.keys() == by_origin.keys(),
             "Alpine catalog recipe coverage differs from the installed origins")
-    objects = {}
-    gaps = []
-    occurrences = 0
     for name, entry in origins.items():
         recipe = entry["recipe"]
         require(recipe["repository"] == "https://github.com/alpinelinux/aports"
@@ -160,26 +184,11 @@ def verify_alpine_notices(project, image, installed, module_notices):
                 and by_origin[name] == {recipe["commit"]} and DIGEST.fullmatch(recipe["sha256"])
                 and re.fullmatch(r"[0-9a-f]{40}", recipe["gitBlob"]),
                 "Alpine recipe pin differs from the installed origin")
-        candidates = entry["noticeCandidates"]
-        references = entry["referenceDocuments"]
-        require(isinstance(candidates, list) and isinstance(references, list)
-                and occurrences + len(candidates) + len(references) <= 1024,
-                "Alpine notice references exceed bounds")
-        if not candidates and not references:
-            gaps.append(name)
-        for row in candidates + references:
-            digest, count = row["sha256"], row["bytes"]
-            require(DIGEST.fullmatch(digest) and type(count) is int and 0 < count <= 128 << 10,
-                    "invalid original Alpine notice byte pin")
-            path = "objects/" + digest
-            pin = {"bytes": count, "sha256": digest}
-            if path not in objects:
-                require(len(objects) < 512, "Alpine notice objects exceed bounds")
-                content = file_bytes(project / (ALPINE_NOTICE_PREFIX + path), 128 << 10)
-                objects[path] = {"bytes": len(content), "sha256": sha256(content).hexdigest()}
-            require(objects[path] == pin, "Alpine notice differs from its original byte pin")
-            occurrences += 1
-    require(objects, "Alpine notice catalog has no candidate bytes")
+    objects, gaps, occurrences = alpine_notice_pins(origins)
+    for path, pin in objects.items():
+        content = file_bytes(project / (ALPINE_NOTICE_PREFIX + path), 128 << 10)
+        require({"bytes": len(content), "sha256": sha256(content).hexdigest()} == pin,
+                "Alpine notice differs from its original byte pin")
     catalog_pin = {"bytes": len(catalog_bytes), "sha256": sha256(catalog_bytes).hexdigest()}
     index = file_bytes(project / (ALPINE_NOTICE_PREFIX + SOURCE_INDEX), 128 << 10)
     source_index = verify_source_index(index, catalog)

@@ -1,7 +1,7 @@
 """Verify the files selected for an Alpine source delivery without extracting them."""
 
 import argparse
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 import hashlib
 import json
 import os
@@ -92,7 +92,8 @@ def file_identity(info):
     return (info.st_dev, info.st_ino, info.st_mode, info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
 
 
-def verify_directory_file(root_fd, name, pin):
+@contextmanager
+def open_directory_file(root_fd, name):
     parts = PurePosixPath(name).parts
     directory = root_fd
     with ExitStack() as stack:
@@ -104,12 +105,16 @@ def verify_directory_file(root_fd, name, pin):
             before = os.fstat(fd)
             require(stat.S_ISREG(before.st_mode) and before.st_nlink == 1,
                     "Alpine source payload must be an independent regular file")
-            observed = verify_payload(payload, before.st_size, pin)
+            yield payload, before.st_size
             after = os.fstat(fd)
             named = os.stat(parts[-1], dir_fd=directory, follow_symlinks=False)
             require(file_identity(before) == file_identity(after) == file_identity(named),
                     "Alpine source payload changed during observation")
-    return observed
+
+
+def verify_directory_file(root_fd, name, pin):
+    with open_directory_file(root_fd, name) as (payload, size):
+        return verify_payload(payload, size, pin)
 
 
 def main():

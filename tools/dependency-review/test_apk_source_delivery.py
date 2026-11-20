@@ -1,10 +1,13 @@
+from contextlib import contextmanager
 from hashlib import sha256, sha512
 from io import BytesIO
 import json
 import os
 from pathlib import Path
+import tarfile
 import unittest
 
+from apk_source_archive import archive_files, archive_size, verify_archive, write_archive
 from apk_source_delivery import delivery_files, verify_directory_file, verify_payload, verify_selected_files
 from apk_source_index import GIT_LINK, RAW_APORTS, git_oid
 from govulncheck_review import ReviewError
@@ -25,8 +28,9 @@ class AlpineSourceDeliveryTests(unittest.TestCase):
         }
         entries = []
         raw_tree = b""
+        modes = {"example.post-install": 0o100755, "example.post-upgrade": GIT_LINK}
         for name, data in sorted(tree.items()):
-            mode = GIT_LINK if name == "example.post-upgrade" else 0o100644
+            mode = modes.get(name, 0o100644)
             oid = git_oid("blob", data)
             entry = {"name": name, "type": "blob", "mode": mode, "oid": oid}
             if mode == GIT_LINK:
@@ -133,3 +137,68 @@ class AlpineSourceDeliveryTests(unittest.TestCase):
         finally:
             os.close(fd)
         self.assertEqual(observed["sha256"], pin["sha256"])
+
+    def archive_inputs(self):
+        notice = b"original license notice\n"
+        notice_pin = byte_pin(notice)
+        catalog_entry = self.catalog["origins"]["example"]
+        catalog_entry["referenceDocuments"] = [notice_pin]
+        index = json.loads(self.index)
+        index["schema"] = 2
+        hook = "example.post-install"
+        index["origins"]["example"]["packagingFilePins"] = {
+            hook: byte_pin(self.payloads[f"aports/main/example/{hook}"]),
+        }
+        index_bytes = json.dumps(index).encode()
+        self.catalog["buildSourceIndex"] = byte_pin(index_bytes)
+        catalog_bytes = json.dumps(self.catalog).encode()
+        inputs = {
+            **self.payloads,
+            "LICENSES/alpine/build-sources.json": index_bytes,
+            "LICENSES/alpine/sources.json": catalog_bytes,
+            "LICENSES/alpine/objects/" + notice_pin["sha256"]: notice,
+        }
+        return archive_files(index_bytes, catalog_bytes), inputs
+
+    def create_archive(self, files, inputs):
+        @contextmanager
+        def open_payload(name):
+            data = inputs[name]
+            yield BytesIO(data), len(data)
+
+        out = BytesIO()
+        write_archive(out, files, open_payload)
+        return out.getvalue()
+
+    def test_source_archive_is_deterministic_and_preserves_the_git_link(self):
+        files, inputs = self.archive_inputs()
+        archive = self.create_archive(files, inputs)
+        self.assertEqual(archive, self.create_archive(files, inputs))
+        self.assertEqual(len(archive), archive_size(files))
+        result = verify_archive(BytesIO(archive), files)
+        self.assertEqual(result["membersVerified"], len(inputs))
+        self.assertEqual(result["noticeObjectsVerified"], 1)
+        self.assertEqual(result["gitLinkTargetsVerified"], 1)
+        self.assertEqual(result["archiveSHA256"], sha256(archive).hexdigest())
+        with tarfile.open(fileobj=BytesIO(archive), mode="r:") as reader:
+            self.assertEqual(reader.getnames(), sorted(inputs))
+            self.assertEqual(reader.getmember("aports/main/example/example.post-install").mode, 0o755)
+            link = reader.getmember("aports/main/example/example.post-upgrade")
+            self.assertTrue(link.issym())
+            self.assertEqual(link.linkname, "example.post-install")
+            self.assertEqual(reader.extractfile(link).read(), inputs["aports/main/example/example.post-install"])
+
+    def test_source_archive_refuses_changed_data_and_inexact_end(self):
+        files, inputs = self.archive_inputs()
+        archive = self.create_archive(files, inputs)
+        archive_path = "sources/example/example.tar.gz"
+        with tarfile.open(fileobj=BytesIO(archive), mode="r:") as reader:
+            offset = reader.getmember(archive_path).offset_data
+        corrupted = bytearray(archive)
+        corrupted[offset] ^= 1
+        with self.assertRaisesRegex(ReviewError, "example.tar.gz: Alpine source payload differs"):
+            verify_archive(BytesIO(corrupted), files)
+        for changed in (archive[:-1], archive + b"extra"):
+            with self.subTest(bytes=len(changed)):
+                with self.assertRaisesRegex(ReviewError, "source archive end differs"):
+                    verify_archive(BytesIO(changed), files)

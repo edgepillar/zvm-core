@@ -385,6 +385,21 @@ archives. Its report gives the verified file and byte counts for the selected
 index. Release maintainers still need to review the final distribution,
 publisher trust and license obligations.
 
+For a portable handoff, the source archive tool streams one uncompressed
+USTAR archive. It includes the pinned source files, their catalog and index,
+and the referenced notice objects. It preserves Git file modes and stores the
+pinned link target in the TAR header. Run `create` with the prepared source
+directory and capture stdout as the archive using the release storage workflow.
+Verify the archive against the catalog and index from the same reviewed checkout.
+
+```sh
+python3 -B tools/dependency-review/apk_source_archive.py verify /path/to/sources.tar
+```
+
+Verification checks the selected member order, headers, payload checksums,
+padding and complete end of the archive. It reports the archive SHA-256
+without extracting files.
+
 Alpine baselayout installs the protocols and services tables from Debian
 netbase 6.4. Both tables match the recipe's retained input hashes. The catalog
 includes Debian's original notice for those inputs and the GNU GPL version 2

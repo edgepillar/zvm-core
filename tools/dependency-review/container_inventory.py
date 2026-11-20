@@ -79,11 +79,24 @@ def main():
         result = 0
     except (ReviewError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         receipt.update(failureStage=phase, errorType=type(error).__name__)
+        if isinstance(error, ReviewError) and re.fullmatch(r"[A-Za-z -]{1,160}", str(error)):
+            receipt["failureReason"] = str(error)
         result = 2
     if created:
         save(args.output / "inventory.json", receipt)
-    print(json.dumps({"status": receipt["status"], "exit": result, "completeSBOM": False,
-                      "releaseAccepted": False, "sourceNotices": receipt.get("sourceNotices")}))
+    summary = {"status": receipt["status"], "exit": result, "completeSBOM": False,
+               "releaseAccepted": False, "sourceNotices": receipt.get("sourceNotices")}
+    if result:
+        summary.update(failureStage=receipt["failureStage"], errorType=receipt["errorType"],
+                       failureReason=receipt.get("failureReason"))
+        summary["commands"] = [
+            {"label": row["label"], "actualExit": row["process"]["actualExit"],
+             "outputComplete": row["process"]["outputComplete"],
+             "terminationReason": row["process"]["terminationReason"],
+             "stdoutBytes": row["process"]["streams"]["stdout"]["bytes"],
+             "stderrBytes": row["process"]["streams"]["stderr"]["bytes"]}
+            for row in receipt["commands"]]
+    print(json.dumps(summary))
     return result
 
 

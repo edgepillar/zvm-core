@@ -55,10 +55,14 @@ func newFixture(t *testing.T) *fixture {
 		runGit(t, dir, "init", "--initial-branch=main")
 	}
 	dir := filepath.Join(f.sources, "zvm-core")
+	lock := []byte("fixture-only-lock")
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("Fixture-only repository.\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	runGit(t, dir, "add", "README.md")
+	if err := os.WriteFile(filepath.Join(dir, "lock.fixture"), lock, 0600); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "README.md", "lock.fixture")
 	runGit(t, dir, "commit", "-m", "Fixture source")
 	sha := runGit(t, dir, "rev-parse", "HEAD")
 	f.policy = Policy{Schema: Schema, MinSignatures: 2, Repositories: []string{"zvm-core", ".github"}, Toolchains: []string{"fixture-go"}, Images: []string{"fixture-engine"}, Compilers: []string{"fixture-solc"}, Contracts: []string{"fixture-contract"}}
@@ -93,7 +97,7 @@ func newFixture(t *testing.T) *fixture {
 	for _, item := range []struct {
 		id, kind string
 		raw      []byte
-	}{{"rollup", "rollup", rollupRaw}, {"l1-genesis", "l1-genesis", []byte(`{"fixtureOnly":true}`)}, {"l2-genesis", "l2-genesis", genesisRaw}, {"deployments", "deployments", deploymentRaw}, {"lock", "lock", []byte("fixture-only-lock")}, {"tool-archive", "artifact", []byte("fixture-only-archive")}, {"runtime", "runtime-code", []byte("0x60006000")}} {
+	}{{"rollup", "rollup", rollupRaw}, {"l1-genesis", "l1-genesis", []byte(`{"fixtureOnly":true}`)}, {"l2-genesis", "l2-genesis", genesisRaw}, {"deployments", "deployments", deploymentRaw}, {"lock", "lock", lock}, {"tool-archive", "artifact", []byte("fixture-only-archive")}, {"runtime", "runtime-code", []byte("0x60006000")}} {
 		pin := File{ID: item.id, Kind: item.kind, Repository: "zvm-core", Path: item.id + ".fixture", Bytes: int64(len(item.raw)), SHA256: digest(item.raw)}
 		f.manifest.Files = append(f.manifest.Files, pin)
 		f.policy.Files = append(f.policy.Files, FileRequirement{ID: pin.ID, Kind: pin.Kind, Repository: pin.Repository, Path: pin.Path})
@@ -158,6 +162,66 @@ func TestSignedOfflineReleaseBindsFilesSourcesAndEpochWithoutClaimingRuntime(t *
 	raw, err := json.Marshal(r)
 	if err != nil || bytes.Contains(raw, []byte(f.files)) || bytes.Contains(raw, []byte(f.sources)) {
 		t.Fatal("receipt contains a private input path")
+	}
+}
+
+func TestSignedReleaseBindsLockToDeclaredSource(t *testing.T) {
+	f := newFixture(t)
+	index := slices.IndexFunc(f.manifest.Files, func(file File) bool { return file.Kind == "lock" })
+	if index < 0 {
+		t.Fatal("missing lock fixture pin")
+	}
+	pin := &f.manifest.Files[index]
+	dir := filepath.Join(f.sources, pin.Repository)
+	updated := []byte("fixture-next-lock")
+	if err := os.WriteFile(filepath.Join(dir, pin.Path), updated, 0600); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "commit", "-am", "Update dependency lock")
+	f.manifest.Repositories[0].Commit = runGit(t, dir, "rev-parse", "HEAD")
+
+	verify := func() (Receipt, error) {
+		return f.manifest.Verify(context.Background(), f.policy, f.signatures(t), f.keys, f.files, f.sources)
+	}
+	receipt, err := verify()
+	if err == nil || !strings.Contains(err.Error(), "source lock lock differs from its pinned bytes") || receipt != (Receipt{}) {
+		t.Fatalf("old release lock was not refused: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(f.files, pin.Repository, pin.Path), updated, 0600); err != nil {
+		t.Fatal(err)
+	}
+	pin.Bytes, pin.SHA256 = int64(len(updated)), digest(updated)
+	if _, err := verify(); err != nil {
+		t.Fatalf("matching source and release locks were refused: %v", err)
+	}
+
+	runGit(t, dir, "rm", pin.Path)
+	runGit(t, dir, "commit", "-m", "Remove dependency lock")
+	f.manifest.Repositories[0].Commit = runGit(t, dir, "rev-parse", "HEAD")
+	receipt, err = verify()
+	if err == nil || !strings.Contains(err.Error(), "missing 1 tracked release lock files") || receipt != (Receipt{}) {
+		t.Fatalf("release lock absent from source was not refused: %v", err)
+	}
+}
+
+func TestSourceLockLargerThanGitMetadataLimit(t *testing.T) {
+	f := newFixture(t)
+	index := slices.IndexFunc(f.manifest.Files, func(file File) bool { return file.Kind == "lock" })
+	if index < 0 {
+		t.Fatal("missing lock fixture pin")
+	}
+	pin := &f.manifest.Files[index]
+	dir := filepath.Join(f.sources, pin.Repository)
+	data := bytes.Repeat([]byte{'x'}, (2<<20)+1)
+	if err := os.WriteFile(filepath.Join(dir, pin.Path), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "commit", "-am", "Commit a large dependency lock")
+	f.manifest.Repositories[0].Commit = runGit(t, dir, "rev-parse", "HEAD")
+	pin.Bytes, pin.SHA256 = int64(len(data)), digest(data)
+	if _, err := f.manifest.VerifySources(context.Background(), f.sources); err != nil {
+		t.Fatalf("a matching source lock above the Git metadata limit was refused: %v", err)
 	}
 }
 
@@ -617,7 +681,8 @@ func TestInitializedGitlinksAreVerifiedAndDirtyDependenciesAreRefused(t *testing
 		t.Fatal(err)
 	}
 	runGit(t, dependency, "init", "--initial-branch=main")
-	if err := os.WriteFile(filepath.Join(dependency, "content"), []byte("fixture dependency\n"), 0600); err != nil {
+	content := []byte("fixture dependency\n")
+	if err := os.WriteFile(filepath.Join(dependency, "content"), content, 0600); err != nil {
 		t.Fatal(err)
 	}
 	runGit(t, dependency, "add", "content")
@@ -630,6 +695,10 @@ func TestInitializedGitlinksAreVerifiedAndDirtyDependenciesAreRefused(t *testing
 	f.manifest.Repositories[0].Commit = runGit(t, dir, "rev-parse", "HEAD")
 	f.manifest.Repositories[0].Gitlinks = []Gitlink{{Path: "dependency", Commit: commit}}
 	f.policy.Gitlinks = []string{"zvm-core:dependency"}
+	pin := File{ID: "child-lock", Kind: "lock", Repository: "zvm-core", Path: "dependency/content",
+		Bytes: int64(len(content)), SHA256: digest(content)}
+	f.manifest.Files = append(f.manifest.Files, pin)
+	f.policy.Files = append(f.policy.Files, FileRequirement{ID: pin.ID, Kind: pin.Kind, Repository: pin.Repository, Path: pin.Path})
 	var err error
 	f.manifest.PolicySHA256, err = f.policy.Fingerprint()
 	if err != nil {

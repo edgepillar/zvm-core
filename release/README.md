@@ -94,9 +94,13 @@ Git fails rather than falling back to network access or replacement objects.
 Hooks, fsmonitor, global configuration and credential prompts are disabled.
 Only builtins inspect repositories and recursive gitlinks; locally configured
 submodule commands are not invoked. Every repository must be clean at its
-declared HEAD, including initialized recursive dependencies. The source walk is
-bounded to 1,024 worktrees, depth eight, one minute total, ten seconds per Git
-read and 2 MiB per output stream.
+declared HEAD, including initialized recursive dependencies. Each dependency
+lock pin must match the bytes of its tracked file at the declared commit,
+including a lock inside an initialized gitlink. The verifier streams the
+committed Git blob and compares its byte count and SHA-256 to the signed pin.
+The source walk is bounded to 1,024 worktrees, depth eight and one minute
+total. Each Git read has a ten-second deadline. Metadata output streams have
+a 2 MiB limit, and each lock blob has its signed byte limit.
 Receipts contain digests/counts and `runtimeObserved: false`, without local paths.
 Image references, declared platform/version labels, running binary/image identity,
 L1 genesis calculation, independent node agreement and production behavior require

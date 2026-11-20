@@ -3,6 +3,8 @@ package release
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -27,9 +29,7 @@ func (b *commandOutput) Write(p []byte) (int, error) {
 	return b.data.Write(p)
 }
 
-func git(ctx context.Context, dir string, args ...string) ([]byte, int, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
+func gitCommand(ctx context.Context, dir string, args ...string) *exec.Cmd {
 	argv := append([]string{"--no-optional-locks", "--no-lazy-fetch", "--no-replace-objects", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + os.DevNull, "-c", "core.untrackedCache=false", "-c", "submodule.recurse=false", "-C", dir}, args...)
 	cmd := exec.CommandContext(ctx, "git", argv...)
 	// Do not inherit repository redirection, credential helpers, fsmonitor or
@@ -38,10 +38,17 @@ func git(ctx context.Context, dir string, args ...string) ([]byte, int, error) {
 	if value := os.Getenv("SystemRoot"); value != "" {
 		cmd.Env = append(cmd.Env, "SystemRoot="+value)
 	}
+	cmd.WaitDelay = time.Second
+	return cmd
+}
+
+func git(ctx context.Context, dir string, args ...string) ([]byte, int, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	cmd := gitCommand(ctx, dir, args...)
 	var stdout, stderr commandOutput
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	cmd.WaitDelay = time.Second
 	err := cmd.Run()
 	if ctx.Err() != nil {
 		return nil, -1, errors.New("Git read deadline exceeded")
@@ -59,7 +66,38 @@ func git(ctx context.Context, dir string, args ...string) ([]byte, int, error) {
 	return stdout.data.Bytes(), 0, nil
 }
 
-func inspectSource(ctx context.Context, dir, expected string, empty bool, depth int, remaining *int) ([]Gitlink, error) {
+type lockDigestWriter struct {
+	digest    io.Writer
+	remaining int64
+}
+
+func (w *lockDigestWriter) Write(data []byte) (int, error) {
+	if int64(len(data)) > w.remaining {
+		return 0, errors.New("source lock exceeds its declared size")
+	}
+	n, err := w.digest.Write(data)
+	w.remaining -= int64(n)
+	return n, err
+}
+
+func verifySourceLock(parent context.Context, dir, object string, pin File) error {
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
+	defer cancel()
+	cmd := gitCommand(ctx, dir, "cat-file", "blob", object)
+	h := sha256.New()
+	output := lockDigestWriter{digest: h, remaining: pin.Bytes}
+	var stderr commandOutput
+	cmd.Stdout, cmd.Stderr = &output, &stderr
+	if err := cmd.Run(); err != nil || stderr.overflow {
+		return fmt.Errorf("source lock %s could not be read within its limits", pin.ID)
+	}
+	if output.remaining != 0 || hex.EncodeToString(h.Sum(nil)) != pin.SHA256 {
+		return fmt.Errorf("source lock %s differs from its pinned bytes", pin.ID)
+	}
+	return nil
+}
+
+func inspectSource(ctx context.Context, dir, expected, prefix string, empty bool, depth int, remaining *int, locks map[string]File) ([]Gitlink, error) {
 	if depth > 8 || *remaining <= 0 {
 		return nil, errors.New("recursive source inventory exceeds its budget")
 	}
@@ -101,7 +139,7 @@ func inspectSource(ctx context.Context, dir, expected string, empty bool, depth 
 	}
 	var links []Gitlink
 	if !empty {
-		tree, code, err := git(ctx, dir, "ls-tree", "-r", "-z", "HEAD")
+		tree, code, err := git(ctx, dir, "ls-tree", "-r", "-z", expected)
 		if err != nil || code != 0 {
 			return nil, errors.New("source tree is unreadable without fetching")
 		}
@@ -111,6 +149,17 @@ func inspectSource(ctx context.Context, dir, expected string, empty bool, depth 
 				continue
 			}
 			fields := strings.Fields(string(meta))
+			lockPath := prefix + string(name)
+			if pin, ok := locks[lockPath]; ok {
+				if len(fields) != 3 || (fields[0] != "100644" && fields[0] != "100755") ||
+					fields[1] != "blob" || !commit(fields[2]) {
+					return nil, fmt.Errorf("source lock %s is not a tracked regular file", pin.ID)
+				}
+				if err := verifySourceLock(ctx, dir, fields[2], pin); err != nil {
+					return nil, err
+				}
+				delete(locks, lockPath)
+			}
 			if len(fields) != 3 || fields[0] != "160000" {
 				continue
 			}
@@ -119,7 +168,8 @@ func inspectSource(ctx context.Context, dir, expected string, empty bool, depth 
 			}
 			link := Gitlink{Path: string(name), Commit: fields[2]}
 			links = append(links, link)
-			if _, err := inspectSource(ctx, filepath.Join(dir, filepath.FromSlash(link.Path)), link.Commit, false, depth+1, remaining); err != nil {
+			if _, err := inspectSource(ctx, filepath.Join(dir, filepath.FromSlash(link.Path)), link.Commit,
+				prefix+link.Path+"/", false, depth+1, remaining, locks); err != nil {
 				return nil, err
 			}
 		}
@@ -134,6 +184,8 @@ func inspectSource(ctx context.Context, dir, expected string, empty bool, depth 
 	return links, nil
 }
 
+// VerifySources checks clean source snapshots and binds dependency lock pins
+// to the Git blobs at their declared commits.
 func (m Manifest) VerifySources(parent context.Context, directory string) (int, error) {
 	if err := m.validate(); err != nil {
 		return 0, err
@@ -145,9 +197,19 @@ func (m Manifest) VerifySources(parent context.Context, directory string) (int, 
 		return 0, err
 	}
 	defer root.Close()
+	locks := make(map[string]map[string]File)
+	for _, pin := range m.Files {
+		if pin.Kind == "lock" {
+			if locks[pin.Repository] == nil {
+				locks[pin.Repository] = make(map[string]File)
+			}
+			locks[pin.Repository][pin.Path] = pin
+		}
+	}
 	remaining := MaxEntries
 	for _, repo := range m.Repositories {
-		links, err := inspectSource(ctx, filepath.Join(directory, repo.Name), repo.Commit, repo.Empty, 0, &remaining)
+		requiredLocks := locks[repo.Name]
+		links, err := inspectSource(ctx, filepath.Join(directory, repo.Name), repo.Commit, "", repo.Empty, 0, &remaining, requiredLocks)
 		if err != nil {
 			return 0, fmt.Errorf("repository %s: %w", repo.Name, err)
 		}
@@ -157,6 +219,9 @@ func (m Manifest) VerifySources(parent context.Context, directory string) (int, 
 		slices.SortFunc(expected, less)
 		if !slices.Equal(links, expected) {
 			return 0, fmt.Errorf("repository %s gitlinks disagree", repo.Name)
+		}
+		if len(requiredLocks) != 0 {
+			return 0, fmt.Errorf("repository %s is missing %d tracked release lock files", repo.Name, len(requiredLocks))
 		}
 	}
 	return len(m.Repositories), nil

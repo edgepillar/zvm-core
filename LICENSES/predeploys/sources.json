@@ -1,0 +1,234 @@
+{
+  "buildLock": {
+    "gitBlob": "4f314d2fcf47ce1813b6c9cf76ea6a66c9227f70",
+    "guide": "https://github.com/Zenoglyphs-VM/zvm-node/blob/9fb7cddc819d935e052069d7cb563eca0c89f6f2/contracts/UPSTREAM_PREDEPLOY_BUILD.md",
+    "sha256": "7e67bcbf539f6eaaf57c13581c79705a9ca0d13d8fbe8d11c0ed589e93d2190d",
+    "url": "https://github.com/Zenoglyphs-VM/zvm-node/blob/9fb7cddc819d935e052069d7cb563eca0c89f6f2/contracts/upstream-predeploy-build.lock.json"
+  },
+  "legalReviewComplete": false,
+  "licenseFiles": {
+    "account-abstraction.txt": {
+      "bytes": 35149,
+      "gitBlob": "f288702d2fa16d3cdf0035b15a9fcbc552cd88e7",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "url": "https://github.com/eth-infinitism/account-abstraction/blob/7af70c8993a6f42973f520ae0752386a5032abe7/LICENSE"
+    },
+    "deterministic-deployment-proxy.txt": {
+      "bytes": 1210,
+      "gitBlob": "cf1ab25da0349f84a3fdd40032f0ce99db813b8b",
+      "sha256": "88d9b4eb60579c191ec391ca04c16130572d7eedc4a86daa58bf28c6e14c9bcd",
+      "url": "https://github.com/Arachnid/deterministic-deployment-proxy/blob/be3c5974db5028d502537209329ff2e730ed336c/LICENSE"
+    },
+    "eips.txt": {
+      "bytes": 7048,
+      "gitBlob": "0e259d42c996742e9e3cba14c677129b2c1b6311",
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+      "url": "https://github.com/ethereum/EIPs/blob/25ac2920ea3a958911e380498bb7c8fbca201542/LICENSE.md"
+    },
+    "lgpl-3.0.txt": {
+      "bytes": 7652,
+      "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118",
+      "url": "https://www.gnu.org/licenses/lgpl-3.0.txt"
+    },
+    "multicall3.txt": {
+      "bytes": 1069,
+      "gitBlob": "2cc7ab2d68b7e8160d2d12153b975ef327c94ae9",
+      "sha256": "2f7380c80b2911360de7778ba9fb8a829c6b04ca9eecdd7aae68222484cb3dd1",
+      "url": "https://github.com/mds1/multicall3/blob/b667d67ecfa5361a81e8f110234ce242613b0012/LICENSE"
+    },
+    "openzeppelin-contracts.txt": {
+      "bytes": 1107,
+      "gitBlob": "817249a0cd2ec1bb1c3d15ed0166f97903e94557",
+      "sha256": "0e05b4f45c8769ece14ba2d202bf6f5ed7132600b642c981266f7255e0187ea3",
+      "url": "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/932fddf69a699a9a80fd2396fd1a2ab91cdda123/LICENSE"
+    },
+    "optimism.txt": {
+      "bytes": 1072,
+      "gitBlob": "f5ab6aada9f01b995f9294a6de1762ba16f63c45",
+      "sha256": "1c7806fae35858a40b2f69dfe2a08e5fabdabf658d8337759078767b96fa3b8c",
+      "url": "https://github.com/ethereum-optimism/optimism/blob/e16bffa18420c86dbab693097bc33117f74a5f7d/LICENSE"
+    },
+    "permit2.txt": {
+      "bytes": 1069,
+      "gitBlob": "b55441cdb04be4d110e09c6932b05248a81f57a9",
+      "sha256": "e0e163f93b3c53b5af417ba2395506ecc7c043b50481a15017f3a6b0875a5e78",
+      "url": "https://github.com/Uniswap/permit2/blob/cc56ad0f3439c502c246fc5cfcc3db92bb8b7219/LICENSE"
+    },
+    "safe-singleton-factory.txt": {
+      "bytes": 1082,
+      "gitBlob": "c9d273f6eaf6f68068bd267e64b81201a6a01226",
+      "sha256": "53d4cee7f423ab005b3fdef59eea06aa141216bdd7962b631f504eac63cf3830",
+      "url": "https://github.com/safe-fndn/safe-singleton-factory/blob/a7be0bbaeda0846e5f328f43669a6a91e942396c/LICENSE"
+    },
+    "solmate.txt": {
+      "bytes": 34522,
+      "gitBlob": "29ebfa545f5580919a4e884d7014d7a3eb2df762",
+      "sha256": "20b067f86de375aae6db0f283ab2e65de24d537733b89bd58432c101259d84cf",
+      "url": "https://github.com/transmissions11/solmate/blob/8d910d876f51c3b2585c9109409d601f600e68e1/LICENSE"
+    }
+  },
+  "predeploys": {
+    "l2/predeploys/BeaconRoots_4788.hex": {
+      "licenseFiles": [
+        "eips.txt"
+      ],
+      "runtimeEvidence": "PUBLISHED_EIP_LITERAL_MATCH",
+      "sha256": "46262d602b1b57c3d94743b6482f3eba6ee35e5beb1d3129359f1ec3cf63301f",
+      "source": {
+        "declaredLicenses": [
+          "CC0-1.0"
+        ],
+        "gitBlob": "efcac43ef9aadd87dd4e0a2fbd14d5d1317eddf3",
+        "sha256": "491e6afa5695e0f9a5df1e0a2009cc928a5bd938aab8b39e6187b8127c7810d2",
+        "url": "https://github.com/ethereum/EIPs/blob/25ac2920ea3a958911e380498bb7c8fbca201542/EIPS/eip-4788.md"
+      }
+    },
+    "l2/predeploys/Create2Deployer_Arachnid.hex": {
+      "compilerGroup": "factory",
+      "licenseFiles": [
+        "deterministic-deployment-proxy.txt",
+        "safe-singleton-factory.txt"
+      ],
+      "runtimeEvidence": "FULL_RUNTIME_MATCH",
+      "sha256": "39a247af89b4f14ba4077268c3e7a7aedaf86dabb32bcbf3f8be44178953eb40",
+      "source": {
+        "declaredLicenses": [],
+        "gitBlob": "6bd082e340b3bd5c2a25b324be73ff39f1a3f5fc",
+        "sha256": "b0fcc3ec91d5df4a0ae0b4d969ab54d0e297cadb5e4ac4da3aeed53130c6d4b9",
+        "url": "https://github.com/Arachnid/deterministic-deployment-proxy/blob/be3c5974db5028d502537209329ff2e730ed336c/source/deterministic-deployment-proxy.yul"
+      }
+    },
+    "l2/predeploys/EntryPoint_v07.hex": {
+      "compilerGroup": "entrypoint",
+      "licenseFiles": [
+        "account-abstraction.txt",
+        "lgpl-3.0.txt",
+        "openzeppelin-contracts.txt"
+      ],
+      "runtimeEvidence": "MATCH_WITH_RECORDED_IMMUTABLE_CONTEXT",
+      "sha256": "4dcad467095cd9af58006b270475ac7591c6946bca08552f6789727097b51eae",
+      "source": {
+        "declaredLicenses": [
+          "GPL-3.0"
+        ],
+        "gitBlob": "44501524df76c23eef6e60fda97dd9440fad01b7",
+        "sha256": "ddad73961da5bad85f0656d9c8e6e729d36a02854198765d335fb59205a55b9e",
+        "url": "https://github.com/eth-infinitism/account-abstraction/blob/7af70c8993a6f42973f520ae0752386a5032abe7/contracts/core/EntryPoint.sol"
+      }
+    },
+    "l2/predeploys/HistoryStorage_2935.hex": {
+      "licenseFiles": [
+        "eips.txt"
+      ],
+      "runtimeEvidence": "PUBLISHED_EIP_LITERAL_MATCH",
+      "sha256": "023a29f9030d14f0349b465ea36f62e2cf708048a720dd6fac8edae170bfe38b",
+      "source": {
+        "declaredLicenses": [
+          "CC0-1.0"
+        ],
+        "gitBlob": "60fab81fff8126a0e0f019a3fa7439fdfafe9471",
+        "sha256": "3237f773d610420fb50438e690c9317e0f13244cb29f8f8dc357d179f1f89103",
+        "url": "https://github.com/ethereum/EIPs/blob/25ac2920ea3a958911e380498bb7c8fbca201542/EIPS/eip-2935.md"
+      }
+    },
+    "l2/predeploys/L1Block.hex": {
+      "compilerGroup": "op",
+      "licenseFiles": [
+        "optimism.txt"
+      ],
+      "runtimeEvidence": "FULL_RUNTIME_MATCH",
+      "sha256": "54af054e9675459839d58bc9f30e10ec20cf1adb3026cb7799ba4d3bba369a9d",
+      "source": {
+        "declaredLicenses": [
+          "MIT"
+        ],
+        "gitBlob": "393f051dbb7e2311a6b08d593866bb71da4581ff",
+        "sha256": "52400220db6411a37f24fc4395a0092806ecd2355c14af70e21c087ae9839f23",
+        "url": "https://github.com/ethereum-optimism/optimism/blob/e16bffa18420c86dbab693097bc33117f74a5f7d/packages/contracts-bedrock/src/L2/L1Block.sol"
+      }
+    },
+    "l2/predeploys/L2ToL1MessagePasser.hex": {
+      "compilerGroup": "op",
+      "licenseFiles": [
+        "optimism.txt"
+      ],
+      "runtimeEvidence": "FULL_RUNTIME_MATCH",
+      "sha256": "6d03889f3d77382cc8b7b1e57c7c5db007f51e2b13fa7ca661c22ee9bf06050c",
+      "source": {
+        "declaredLicenses": [
+          "MIT"
+        ],
+        "gitBlob": "682b5ac1b2ccbff06ae8fa9156c0d06c164b4c76",
+        "sha256": "8833896e407f3653b74d14cdb51fb7e76ac01fbc5abe594ab978dec03b0e9298",
+        "url": "https://github.com/ethereum-optimism/optimism/blob/e16bffa18420c86dbab693097bc33117f74a5f7d/packages/contracts-bedrock/src/L2/L2ToL1MessagePasser.sol"
+      }
+    },
+    "l2/predeploys/Multicall3.hex": {
+      "compilerGroup": "multicall",
+      "licenseFiles": [
+        "multicall3.txt"
+      ],
+      "runtimeEvidence": "FULL_RUNTIME_MATCH",
+      "sha256": "0fb6a9dbcc4e17098c35d4b821bfc8cc404ab2dbd195d75bee6ce914979ddbfd",
+      "source": {
+        "declaredLicenses": [
+          "MIT"
+        ],
+        "gitBlob": "7582ea960ca347a151b3ad3af067fa7b09ed3b78",
+        "sha256": "2054218939d3fa0f52f8ce1a33658d570a550671f63197356ee5744f7e188b1e",
+        "url": "https://github.com/mds1/multicall3/blob/b667d67ecfa5361a81e8f110234ce242613b0012/src/Multicall3.sol"
+      }
+    },
+    "l2/predeploys/Permit2.hex": {
+      "compilerGroup": "permit2",
+      "licenseFiles": [
+        "permit2.txt",
+        "solmate.txt"
+      ],
+      "runtimeEvidence": "MATCH_WITH_RECORDED_IMMUTABLE_CONTEXT",
+      "sha256": "977d1ac2e903b0628b330b9e73308f0553e3af495e34a40ca04f5cd3d6052716",
+      "source": {
+        "declaredLicenses": [
+          "MIT"
+        ],
+        "gitBlob": "7249e40a813980c099f5a95f6fb584339b3ff50c",
+        "sha256": "a19dd81d4edafe3bba0178abfc9063886c2981b4711a4cbbf3fac19370defc9a",
+        "url": "https://github.com/Uniswap/permit2/blob/cc56ad0f3439c502c246fc5cfcc3db92bb8b7219/src/Permit2.sol"
+      }
+    },
+    "l2/predeploys/SafeSingletonFactory.hex": {
+      "compilerGroup": "factory",
+      "licenseFiles": [
+        "deterministic-deployment-proxy.txt",
+        "safe-singleton-factory.txt"
+      ],
+      "runtimeEvidence": "FULL_RUNTIME_MATCH",
+      "sha256": "39a247af89b4f14ba4077268c3e7a7aedaf86dabb32bcbf3f8be44178953eb40",
+      "source": {
+        "declaredLicenses": [],
+        "gitBlob": "6bd082e340b3bd5c2a25b324be73ff39f1a3f5fc",
+        "sha256": "b0fcc3ec91d5df4a0ae0b4d969ab54d0e297cadb5e4ac4da3aeed53130c6d4b9",
+        "url": "https://github.com/safe-fndn/safe-singleton-factory/blob/a7be0bbaeda0846e5f328f43669a6a91e942396c/source/deterministic-deployment-proxy.yul"
+      }
+    },
+    "l2/predeploys/SenderCreator_v07.hex": {
+      "compilerGroup": "entrypoint",
+      "licenseFiles": [
+        "account-abstraction.txt",
+        "lgpl-3.0.txt",
+        "openzeppelin-contracts.txt"
+      ],
+      "runtimeEvidence": "FULL_RUNTIME_MATCH",
+      "sha256": "2c945b394a11f309829ce5dad9863d98d0e583fd4537dfe2660046d0c52d8e6b",
+      "source": {
+        "declaredLicenses": [
+          "GPL-3.0"
+        ],
+        "gitBlob": "43ea80367eff0d026136260c4eb4db5dc87e0274",
+        "sha256": "84b46309bf6d890c13362c9c449ff927fa72465741517fc405c8c24baae2d1a3",
+        "url": "https://github.com/eth-infinitism/account-abstraction/blob/7af70c8993a6f42973f520ae0752386a5032abe7/contracts/core/SenderCreator.sol"
+      }
+    }
+  },
+  "schema": 1
+}

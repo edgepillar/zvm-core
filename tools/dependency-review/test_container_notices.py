@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from container_inventory import image_projection
-from container_notices import ROOT_MODULE, payload_rows, verify_bundle
+from container_notices import PREDEPLOY_NOTICE_PREFIX, ROOT_MODULE, payload_rows, verify_bundle, verify_predeploy_notices
 from govulncheck_review import ReviewError
 
 
@@ -32,6 +32,14 @@ class ContainerNoticeTests(unittest.TestCase):
         self.std_notice = {"path": "LICENSE", **pin(b"standard library license")}
         self.header = pin(b"// copyright fixture\n")
         self.embedded = {"path": "l2/predeploys/fixture.hex", **pin(self.checked["l2/predeploys/fixture.hex"])}
+        self.license = b"original predeploy license"
+        self.catalog = {"schema": 1, "legalReviewComplete": False, "licenseFiles": {"fixture.txt": pin(self.license)},
+                        "predeploys": {self.embedded["path"]: {"sha256": self.embedded["sha256"],
+                                                              "licenseFiles": ["fixture.txt"]}}}
+        self.catalog_path = PREDEPLOY_NOTICE_PREFIX + "sources.json"
+        self.license_path = PREDEPLOY_NOTICE_PREFIX + "fixture.txt"
+        self.set_predeploy_file(self.catalog_path, json.dumps(self.catalog).encode())
+        self.set_predeploy_file(self.license_path, self.license)
         self.pins = [*self.project_notices, self.std_notice, self.header]
         self.module = ROOT_MODULE + "/cmd/zvm"
         self.binary = pin(b"binary")["sha256"]
@@ -59,6 +67,17 @@ class ContainerNoticeTests(unittest.TestCase):
                          for row in self.pins}
         self.observed["README.txt"] = pin(b"bundle guide")
 
+    def set_predeploy_file(self, path, content):
+        self.checked[path] = content
+        self.project_notices.append({"path": path, **pin(content), "selectionScope": "MODULE_NOTICE_DIRECTORY"})
+
+    def verify_predeploys(self):
+        notices = {row["path"]: row for row in self.project_notices}
+        embedded = {self.embedded["path"]: self.embedded["sha256"]}
+        with patch("container_notices.file_bytes",
+                   side_effect=lambda path, limit: self.checked[path.relative_to(self.project).as_posix()]):
+            return verify_predeploy_notices(self.project, embedded, notices)
+
     def verify(self):
         raw = (json.dumps(self.manifest) + "\n").encode()
         with patch("container_notices.file_bytes",
@@ -70,8 +89,26 @@ class ContainerNoticeTests(unittest.TestCase):
         lines += [f"{row['sha256']}  {path}\n" for path, row in self.observed.items()]
         self.assertEqual(payload_rows("".join(lines).encode()), self.observed)
         result = self.verify()
-        self.assertEqual(result["objectCount"], 4)
+        self.assertEqual(result["objectCount"], 6)
         self.assertEqual(result["projectEmbeddedFiles"], {self.embedded["path"]: self.embedded["sha256"]})
+        self.assertEqual(result["predeployNotices"], {
+            "catalogSHA256": pin(self.checked[self.catalog_path])["sha256"], "thirdPartyEmbeddedFiles": 1,
+            "licenseTexts": 1, "licenseTextBytes": len(self.license), "legalReviewComplete": False,
+        })
+
+    def test_missing_predeploy_notice_is_rejected(self):
+        self.project_notices.pop()
+        with self.assertRaisesRegex(ReviewError, "predeploy notice inventory differs"):
+            self.verify_predeploys()
+
+    def test_changed_predeploy_license_and_stale_embedded_digest_are_rejected(self):
+        self.checked[self.license_path] = b"rewritten license"
+        with self.assertRaisesRegex(ReviewError, "original byte pin"):
+            self.verify_predeploys()
+        self.checked[self.license_path] = self.license
+        self.embedded["sha256"] = "0" * 64
+        with self.assertRaisesRegex(ReviewError, "catalog output or license reference"):
+            self.verify_predeploys()
 
     def test_changed_binary_or_lock_is_rejected(self):
         self.manifest["binarySha256"] = "0" * 64

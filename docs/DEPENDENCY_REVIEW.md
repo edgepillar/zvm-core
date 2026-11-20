@@ -297,9 +297,31 @@ CI reads the manifest from the exact built image. It compares the binary
 digest, Go lock digests and each notice object's size and digest. It also
 compares the embedded project files with the checked source. The image commands
 return manifest and digest metadata, so the report reuses the built binary and
-keeps the notice payloads in the image. The review of compiler intermediates,
-corresponding source, complete license obligations and Alpine notice text
-remains open.
+keeps the notice payloads in the image. The review of compiler intermediates
+and Alpine notice text remains open.
+
+## Embedded predeploy source and license catalog
+
+The catalog binds all ten third-party predeploy paths in the CLI to the exact
+embedded bytes. Eight paths match the outputs recorded in the pinned Node
+compiler lock. The EntryPoint and Permit2 records use the lock's independently
+recorded immutable context, and the other six record full runtime equality.
+Two additional paths match the runtime literals published in the pinned EIPs.
+The two factory paths share a byte digest and retain their distinct upstream
+attribution. [Predeploy source and license catalog](../LICENSES/predeploys/sources.json)
+
+The original license texts cover the named source groups, including the
+AGPL-3.0-only declarations on the two Solmate inputs to Permit2 and the
+LGPL-3.0-only declaration on `Exec.sol` in the EntryPoint group. The Node compiler
+lock records the complete source-unit paths, archive integrity pins, compiler
+versions and build settings. [Solmate source](https://github.com/transmissions11/solmate/blob/8d910d876f51c3b2585c9109409d601f600e68e1/src/utils/SafeTransferLib.sol) ·
+[EntryPoint group source](https://github.com/eth-infinitism/account-abstraction/blob/7af70c8993a6f42973f520ae0752386a5032abe7/contracts/utils/Exec.sol) ·
+[Locked compiler inputs](https://github.com/Zenoglyphs-VM/zvm-node/blob/9fb7cddc819d935e052069d7cb563eca0c89f6f2/contracts/upstream-predeploy-build.lock.json)
+
+CI compares the catalog and every referenced original text with the notice
+objects in the exact CLI image. The corresponding-source distribution method
+and license obligations for the combined outputs remain open for review by the
+release maintainers. [GNU GPL version 3](https://www.gnu.org/licenses/gpl-3.0.html)
 
 The image metadata projection handles Docker Engine API 1.52's optional
 `Config.User` field and records whether the engine reported it. The observation

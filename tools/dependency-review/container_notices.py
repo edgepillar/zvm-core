@@ -10,6 +10,8 @@ from govulncheck_review import ReviewError, file_bytes, unique_object
 
 ROOT_MODULE = "github.com/Zenoglyphs-VM/zvm-core"
 NOTICE_DIRECTORY = "/usr/share/doc/zvm/notices"
+PREDEPLOY_NOTICE_PREFIX = "LICENSES/predeploys/"
+PROJECT_PREDEPLOYS = {"l2/predeploys/WrappedQSR.hex", "l2/predeploys/ZVMBridge.hex"}
 MAX_MANIFEST = 8 << 20
 MAX_INVENTORY = 2 << 20
 PAYLOAD = r"(?:README\.txt|objects/[0-9a-f]{64})"
@@ -77,6 +79,51 @@ def payload_rows(raw):
     return {name: {"bytes": size, "sha256": hashes[name]} for name, size in sizes.items()}
 
 
+def verify_predeploy_notices(project, embedded, module_notices):
+    catalog_bytes = file_bytes(project / (PREDEPLOY_NOTICE_PREFIX + "sources.json"), 128 << 10)
+    catalog = json.loads(catalog_bytes, object_pairs_hook=unique_object)
+    require(catalog["schema"] == 1 and catalog["legalReviewComplete"] is False,
+            "unexpected predeploy notice catalog scope")
+    catalog_pin = {"bytes": len(catalog_bytes), "sha256": sha256(catalog_bytes).hexdigest()}
+    expected = {"sources.json": catalog_pin}
+    licenses = catalog["licenseFiles"]
+    require(isinstance(licenses, dict) and 0 < len(licenses) <= 128, "invalid predeploy license inventory")
+    for name, pin in licenses.items():
+        require(re.fullmatch(r"[a-z0-9][a-z0-9.-]*\.txt", name) and len(name) <= 128,
+                "invalid predeploy license filename")
+        content = file_bytes(project / (PREDEPLOY_NOTICE_PREFIX + name), 128 << 10)
+        observed = {"bytes": len(content), "sha256": sha256(content).hexdigest()}
+        require(observed == {"bytes": pin["bytes"], "sha256": pin["sha256"]},
+                "predeploy license differs from its original byte pin")
+        expected[name] = observed
+
+    collected = {path.removeprefix(PREDEPLOY_NOTICE_PREFIX): row for path, row in module_notices.items()
+                 if path.startswith(PREDEPLOY_NOTICE_PREFIX)}
+    require(collected.keys() == expected.keys(), "image predeploy notice inventory differs from the catalog")
+    for name, pin in expected.items():
+        row = collected[name]
+        require(row["selectionScope"] == "MODULE_NOTICE_DIRECTORY"
+                and pin == {"bytes": row["bytes"], "sha256": row["sha256"]},
+                "image predeploy notice differs from the checked source")
+
+    targets = catalog["predeploys"]
+    third_party = {path: digest for path, digest in embedded.items()
+                   if path.startswith("l2/predeploys/") and path not in PROJECT_PREDEPLOYS}
+    require(isinstance(targets, dict) and 0 < len(targets) <= 128 and targets.keys() == third_party.keys(),
+            "predeploy catalog does not cover the embedded third party files")
+    referenced = set()
+    for path, row in targets.items():
+        references = row["licenseFiles"]
+        require(row["sha256"] == third_party[path] and isinstance(references, list)
+                and 0 < len(references) <= len(licenses) and set(references) <= licenses.keys(),
+                "predeploy catalog output or license reference differs")
+        referenced.update(references)
+    require(referenced == licenses.keys(), "predeploy license lacks a catalog reference")
+    return {"catalogSHA256": catalog_pin["sha256"], "thirdPartyEmbeddedFiles": len(targets),
+            "licenseTexts": len(licenses), "licenseTextBytes": sum(row["bytes"] for row in licenses.values()),
+            "legalReviewComplete": False}
+
+
 def verify_bundle(raw, observed, image, source, binary_sha256, project):
     require(raw.endswith(b"\n") and len(raw) <= MAX_MANIFEST, "notice manifest is incomplete or oversized")
     manifest = json.loads(raw, object_pairs_hook=unique_object)
@@ -119,6 +166,7 @@ def verify_bundle(raw, observed, image, source, binary_sha256, project):
     require(1 < len(modules) <= 1024 and "std" in modules and ROOT_MODULE in modules,
             "SDK or project notice module is absent")
     required = {row["path"]: row for row in modules[ROOT_MODULE]["notices"]}
+    require(len(required) == len(modules[ROOT_MODULE]["notices"]), "duplicate project notice path")
     for path in ("LICENSE", "NOTICE.md"):
         notice = required[path]
         content = file_bytes(project / path, 128 << 10)
@@ -150,11 +198,13 @@ def verify_bundle(raw, observed, image, source, binary_sha256, project):
                 project_embedded[path] = source_file["sha256"]
     require(manifest["entryPackage"] in packages and 0 < len(packages) <= 4096 and referenced == set(objects),
             "notice source object closure differs")
+    predeploys = verify_predeploy_notices(project, project_embedded, required)
     return {"status": manifest["status"], "manifestSHA256": sha256(raw).hexdigest(),
             "manifestBytes": len(raw), "binarySHA256": binary_sha256, "selectedPackages": len(packages),
             "dependencyModules": len(modules) - 2, "selectedSourceFiles": source_files,
             "objectCount": len(objects), "objectBytes": sum(objects.values()),
             "sourceSupplements": supplements, "projectEmbeddedFiles": project_embedded,
+            "predeployNotices": predeploys,
             "modulesWithoutNoticeFiles": sorted(name for name, row in modules.items()
                 if row["noCandidateNoticeFileObserved"]),
             "readme": observed["README.txt"], "completeLicenseReview": False}

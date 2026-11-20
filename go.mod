@@ -9,6 +9,7 @@ require (
 	github.com/ethereum/go-ethereum v0.0.0-00010101000000-000000000000
 	github.com/holiman/uint256 v1.3.2
 	github.com/tyler-smith/go-bip39 v1.1.0
+	golang.org/x/sys v0.47.0
 	modernc.org/sqlite v1.58.0
 )
 
@@ -96,7 +97,6 @@ require (
 	golang.org/x/crypto v0.44.0 // indirect
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect

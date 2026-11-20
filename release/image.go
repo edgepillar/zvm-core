@@ -176,84 +176,93 @@ func resolveOCIImage(root *os.Root, image Image) (reference, manifest, config st
 	return reference, manifest, config, nil
 }
 
-func observeDockerImage(parent context.Context, target ImageTarget, platform, config string) (string, error) {
+type dockerSnapshot struct {
+	ID        string `json:"id"`
+	Image     string `json:"image"`
+	Status    string `json:"status"`
+	Running   bool   `json:"running"`
+	Manifest  string `json:"manifest"`
+	PID       int    `json:"pid"`
+	StartedAt string `json:"startedAt"`
+}
+
+func observeDockerImage(parent context.Context, target ImageTarget, platform, config string) (dockerSnapshot, error) {
 	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
 	// Use the JSON field names across Docker API versions. The selected image
 	// descriptor is optional on engines with the classic image store.
-	const projected = `{"id":{{json (index . "Id")}},"image":{{json (index . "Image")}},"status":{{json (index (index . "State") "Status")}},"running":{{json (index (index . "State") "Running")}},"manifest":{{with index . "ImageManifestDescriptor"}}{{json (index . "digest")}}{{else}}""{{end}}}`
+	const projected = `{"id":{{json (index . "Id")}},"image":{{json (index . "Image")}},"status":{{json (index (index . "State") "Status")}},"running":{{json (index (index . "State") "Running")}},"manifest":{{with index . "ImageManifestDescriptor"}}{{json (index . "digest")}}{{else}}""{{end}},"pid":{{json (index (index . "State") "Pid")}},"startedAt":{{json (index (index . "State") "StartedAt")}}}`
 	cmd := exec.CommandContext(ctx, "docker", "--context", target.DockerContext, "container", "inspect",
 		"--format", projected, "--", target.ContainerID)
 	cmd.WaitDelay = time.Second
 	var output commandOutput
 	cmd.Stdout = &output
 	if cmd.Run() != nil || output.overflow || output.data.Len() > 1024 {
-		return "", errors.New("Docker container observation was unavailable")
+		return dockerSnapshot{}, errors.New("Docker container observation was unavailable")
 	}
 	return checkDockerImage(output.data.Bytes(), target.ContainerID, platform, config)
 }
 
-func checkDockerImage(raw []byte, container, platform, config string) (string, error) {
-	var observed struct {
-		ID       string `json:"id"`
-		Image    string `json:"image"`
-		Status   string `json:"status"`
-		Running  bool   `json:"running"`
-		Manifest string `json:"manifest"`
-	}
+func checkDockerImage(raw []byte, container, platform, config string) (dockerSnapshot, error) {
+	var observed dockerSnapshot
 	if decode(raw, &observed) != nil || observed.ID != container || !observed.Running || observed.Status != "running" || !sha256Descriptor(observed.Image) {
-		return "", errors.New("Docker did not report the selected container running with a valid image ID")
+		return dockerSnapshot{}, errors.New("Docker did not report the selected container running with a valid image ID")
 	}
 	if observed.Manifest != "" {
 		if observed.Manifest != platform {
-			return "", errors.New("running container manifest disagrees with the signed platform manifest")
+			return dockerSnapshot{}, errors.New("running container manifest disagrees with the signed platform manifest")
 		}
-		return observed.Manifest, nil
+		return observed, nil
 	}
 	if observed.Image != config {
-		return "", errors.New("running container image ID disagrees with the signed image configuration")
+		return dockerSnapshot{}, errors.New("running container image ID disagrees with the signed image configuration")
 	}
-	return "", nil
+	return observed, nil
 }
 
 // ObserveImage authenticates the release before reading OCI blobs or inspecting
 // the observer's explicitly selected container. It performs no registry lookup.
 func (m Manifest) ObserveImage(ctx context.Context, p Policy, s Signatures, k TrustedKeys, target ImageTarget) (ImageObservation, error) {
-	var result ImageObservation
 	count, err := m.VerifySignatures(p, s, k)
 	if err != nil {
-		return result, err
+		return ImageObservation{}, err
 	}
+	result, _, err := m.observeImage(ctx, count, target)
+	return result, err
+}
+
+func (m Manifest) observeImage(ctx context.Context, count int, target ImageTarget) (ImageObservation, dockerSnapshot, error) {
+	var result ImageObservation
 	index := slices.IndexFunc(m.Images, func(image Image) bool { return image.ID == target.ImageID })
 	if index < 0 || !hash(target.ContainerID, 64) || target.DockerContext == "" || target.OCIRoot == "" {
-		return result, errors.New("signed image ID, full container ID, Docker context and OCI root are required")
+		return result, dockerSnapshot{}, errors.New("signed image ID, full container ID, Docker context and OCI root are required")
 	}
 	root, err := openDirectory(target.OCIRoot)
 	if err != nil {
-		return result, err
+		return result, dockerSnapshot{}, err
 	}
 	defer root.Close()
 	image := m.Images[index]
 	reference, platformManifest, config, err := resolveOCIImage(root, image)
 	if err != nil {
-		return result, err
+		return result, dockerSnapshot{}, err
 	}
 	manifest, err := m.Fingerprint()
 	if err != nil {
-		return result, err
+		return result, dockerSnapshot{}, err
 	}
 	epoch, err := m.EpochFingerprint()
 	if err != nil {
-		return result, err
+		return result, dockerSnapshot{}, err
 	}
-	observedManifest, err := observeDockerImage(ctx, target, platformManifest, config)
+	observed, err := observeDockerImage(ctx, target, platformManifest, config)
 	if err != nil {
-		return result, err
+		return result, dockerSnapshot{}, err
 	}
 	return ImageObservation{
 		ManifestSHA256: manifest, EpochSHA256: epoch, TrustedSignatures: count,
 		ImageID: image.ID, Platform: image.Platform, ReferenceDigest: reference,
 		PlatformManifest: platformManifest, ImageConfigDigest: config,
-		ObservedPlatformManifest: observedManifest, ContainerRunning: true,
-	}, nil
+		ObservedPlatformManifest: observed.Manifest, ContainerRunning: true,
+	}, observed, nil
 }

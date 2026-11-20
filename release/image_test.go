@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -129,8 +130,8 @@ func TestDockerImageObservationRequiresMatchingManifestOrClassicConfig(t *testin
 				if err == nil || !strings.Contains(err.Error(), test.errorText) {
 					t.Fatalf("unexpected check error: %v", err)
 				}
-			} else if err != nil || got != test.reportedManifest {
-				t.Fatalf("unexpected checked manifest: %q: %v", got, err)
+			} else if err != nil || got.Manifest != test.reportedManifest {
+				t.Fatalf("unexpected checked manifest: %q: %v", got.Manifest, err)
 			}
 		})
 	}
@@ -208,7 +209,10 @@ func TestReleaseImageObservationAgainstDockerEngine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	layer := fixtureTar(t, tarEntry{"observer-fixture", 0755, compileImageFixture(t)})
+	executable := compileImageFixture(t)
+	mountedConfig := []byte("mode=test\n")
+	layer := fixtureTar(t, tarEntry{"observer-fixture", 0755, executable},
+		tarEntry{"observer-bundled-config", 0644, mountedConfig})
 	layerSize := int64(len(layer))
 	layerDescriptor := ociDescriptor{Digest: "sha256:" + digest(layer), Size: &layerSize,
 		MediaType: "application/vnd.oci.image.layer.v1.tar"}
@@ -243,9 +247,14 @@ func TestReleaseImageObservationAgainstDockerEngine(t *testing.T) {
 		tarEntry{"oci-layout", 0600, []byte(`{"imageLayoutVersion":"1.0.0"}`)},
 		tarEntry{"index.json", 0600, index}, tarEntry{"manifest.json", 0600, loadManifest})
 	engine := fixtureDocker(t, nil, "version", "--format", "{{.Server.Version}}")
+	configPath := filepath.Join(root, "process-config")
+	if err := os.WriteFile(configPath, mountedConfig, 0600); err != nil {
+		t.Fatal(err)
+	}
 	fixtureDocker(t, archive, "image", "load", "--quiet")
 	container := fixtureDocker(t, nil, "container", "run", "--detach", "--rm", "--pull=never",
-		"--network=none", "--read-only", tag)
+		"--network=none", "--read-only", "--cap-drop=ALL", "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
+		"--mount", "type=bind,source="+configPath+",target=/observer-config,readonly", tag)
 	if !hash(container, 64) {
 		t.Fatal("Docker did not return the full fixture container ID")
 	}
@@ -294,4 +303,8 @@ func TestReleaseImageObservationAgainstDockerEngine(t *testing.T) {
 		observation != (ImageObservation{}) {
 		t.Fatalf("running container received a record for a different signed image: %+v, %v", observation, err)
 	}
+	image.Reference = "registry.invalid/fixture/engine@" + manifest.Digest
+	t.Run("process and mounted configuration", func(t *testing.T) {
+		checkProcessFixture(t, f, target, executable, mountedConfig, configPath)
+	})
 }

@@ -202,6 +202,58 @@ Registry layer content, mounted files, the running process and complete service
 coverage require separate evidence. Each OCI document is limited to 4 MiB and
 the Docker observation has a ten-second deadline.
 
+## Docker process and configuration observations
+
+`release-observe-process` extends the image observation on the Linux Docker
+host that owns the selected container. The observer must have permission to
+read its init process through local procfs. The kernel must provide pidfds,
+`openat2` and `statx` mount identities.
+
+```sh
+zvm release-observe-process \
+  -manifest manifest.json -policy policy.json \
+  -signatures signatures.json -trusted-keys trusted-keys.json \
+  -image execution -container "$CONTAINER_ID" \
+  -docker-context "$DOCKER_CONTEXT" -oci-root "$OCI_ROOT" \
+  -files-root release-inputs
+```
+
+Include a `runtime-process-policy` file of kind `config` in the independently
+reviewed file inventory and the signed manifest. In this example, both
+`execution-binary` and `execution-config` are signed file IDs.
+
+```json
+{
+  "schema": 1,
+  "services": [
+    {
+      "image": "execution",
+      "executable": "execution-binary",
+      "files": [
+        {"path": "/etc/execution/config.json", "file": "execution-config", "mounted": true}
+      ]
+    }
+  ]
+}
+```
+
+Each service names a unique signed image ID, an executable pin of kind
+`artifact`, and its list of configuration paths and file pins. A path with
+`mounted: true` must resolve on a separate mount from the process root.
+An empty list is explicit for a service with no additional file pins.
+
+The observer matches the Docker PID to a local process handle and container
+cgroup. It hashes the actual executable and signed paths in the process
+filesystem view, then rechecks the Docker snapshot and file and mount
+identities. The receipt contains the image evidence, executable and process
+policy digests, and file counts. The executable and file bytes are read once
+with a shared buffer. Kernel access errors, mismatches and identity changes
+prevent a receipt. [Linux process root](https://man7.org/linux/man-pages/man5/proc_pid_root.5.html)
+
+The record covers the Docker init executable and selected files at observation
+time. Loaded application state, child executables and all required services
+need their own evidence.
+
 ## Saved contract build material
 
 A release can declare an additional file with `id: "contract-build-policy"`,

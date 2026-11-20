@@ -115,6 +115,27 @@ class ApkRepositoryTests(unittest.TestCase):
         verify.assert_called_once_with(self.control, self.pem, self.signature)
 
     @patch("apk_repository.verify_rsa_signature")
+    def test_shared_installation_matches_one_package_signature(self, verify):
+        other = {**self.installed, "legalReviewComplete": False}
+        report = review_archived_package(self.apk, self.pem, self.key, [self.installed], "example",
+                                         against=[[other]])
+        self.assertTrue(report["archiveVerified"])
+        self.assertFalse(report["complete"])
+        verify.assert_called_once_with(self.control, self.pem, self.signature)
+
+    @patch("apk_repository.verify_rsa_signature")
+    def test_shared_package_requires_the_same_installed_identity_in_every_catalog(self, verify):
+        for changed in ({"architecture": "aarch64"}, {"installedChecksum": "Q1" + "B" * 28}):
+            other = {**self.installed, **changed}
+            with self.subTest(changed=changed), self.assertRaisesRegex(ReviewError, "differs across catalogs"):
+                review_archived_package(self.apk, self.pem, self.key, [self.installed], "example",
+                                        against=[[other]])
+        with self.assertRaisesRegex(ReviewError, "exactly once"):
+            review_archived_package(self.apk, self.pem, self.key, [self.installed], "example",
+                                    against=[[self.installed, self.installed]])
+        verify.assert_not_called()
+
+    @patch("apk_repository.verify_rsa_signature")
     def test_archived_package_requires_the_exact_installed_checksum_and_publisher_key(self, verify):
         changed = {**self.installed, "installedChecksum": "Q1" + "A" * 28}
         with self.assertRaisesRegex(ReviewError, "control digest differs"):

@@ -23,6 +23,7 @@ from govulncheck_review import ReviewError, file_bytes, unique_object
 INDEX_LIMIT = 8 << 20
 APK_LIMIT = 32 << 20
 CONTROL_LIMIT = 512 << 10
+CATALOG_LIMIT = 128 << 10
 PACKAGE_FIELDS = {
     "P": ("name", "pkgname"),
     "V": ("version", "pkgver"),
@@ -158,17 +159,25 @@ def verify_package(raw, expected, pem, key):
             "dataSHA256": metadata["datahash"], "signatureVerified": True}
 
 
-def review_archived_package(raw, pem, key, installed, name):
-    """Verify a publisher-signed APK against one package in the pinned image catalog."""
-    verify_repository_key(pem, key)
-    require(IDENTITY.fullmatch(name), "selected APK package has an invalid name")
+def archived_identity(installed, name):
+    require(isinstance(installed, list) and 0 < len(installed) <= 512, "invalid installed APK inventory")
     selected = [package for package in installed if package["name"] == name]
     require(len(selected) == 1, "selected package must appear exactly once in the image catalog")
     package = selected[0]
     expected = {field: str(package[source]) for field, (source, _) in PACKAGE_FIELDS.items()}
     expected["C"] = package["installedChecksum"]
+    return expected
+
+
+def review_archived_package(raw, pem, key, installed, name, *, against=()):
+    """Verify a publisher-signed APK once for matching installed package records."""
+    verify_repository_key(pem, key)
+    require(IDENTITY.fullmatch(name), "selected APK package has an invalid name")
+    expected = archived_identity(installed, name)
+    for catalog in against:
+        require(archived_identity(catalog, name) == expected, "installed package identity differs across catalogs")
     archive = verify_package(raw, expected, pem, key)
-    return {"name": name, "version": package["version"], "archive": archive, "archiveVerified": True,
+    return {"name": name, "version": expected["V"], "archive": archive, "archiveVerified": True,
             "installedIdentityMatched": True, "indexSignatureVerified": False, "complete": False,
             "repositoryKeyPEMSHA256": key["pem"]["sha256"]}
 
@@ -238,24 +247,36 @@ def main():
     parser.add_argument("--key", required=True, help="reviewed public PEM file or - for stdin")
     parser.add_argument("--packages", type=Path, help="directory of exact package archives")
     parser.add_argument("--installed-package", help="image catalog name for --archive")
+    parser.add_argument("--against-catalog", action="append", default=[], type=Path,
+                        help="additional reviewed installed package catalog for --archive")
     args = parser.parse_args()
     if args.archive is not None and (args.installed_package is None or args.packages is not None):
         parser.error("--archive requires --installed-package and excludes --packages")
     if args.index is not None and args.installed_package is not None:
         parser.error("--installed-package requires --archive")
+    if args.index is not None and args.against_catalog:
+        parser.error("--against-catalog requires --archive")
+    if len(args.against_catalog) > 8:
+        parser.error("--against-catalog accepts up to eight additional catalogs")
     if args.archive == args.key == "-":
         parser.error("only one input can use stdin")
     try:
         project = Path.cwd()
-        catalog_raw = file_bytes(project / "LICENSES/alpine/sources.json", 128 << 10)
+        catalog_raw = file_bytes(project / "LICENSES/alpine/sources.json", CATALOG_LIMIT)
         catalog = json.loads(catalog_raw, object_pairs_hook=unique_object)
         installed = catalog["installedPackages"]
         key = load_repository_key(project, installed)
         pem = sys.stdin.buffer.read(4097) if args.key == "-" else file_bytes(Path(args.key), 4096)
         if args.archive is not None:
+            additional_raw = [file_bytes(path, CATALOG_LIMIT) for path in args.against_catalog]
+            additional = [json.loads(body, object_pairs_hook=unique_object)["installedPackages"]
+                          for body in additional_raw]
             raw = (sys.stdin.buffer.read(APK_LIMIT + 1) if args.archive == "-"
                    else file_bytes(Path(args.archive), APK_LIMIT))
-            report = review_archived_package(raw, pem, key, installed, args.installed_package)
+            report = review_archived_package(raw, pem, key, installed, args.installed_package, against=additional)
+            if additional_raw:
+                report["matchedCatalogSHA256s"] = sorted({sha256(body).hexdigest()
+                                                          for body in [catalog_raw, *additional_raw]})
             result = 0
         else:
             with ExitStack() as stack:

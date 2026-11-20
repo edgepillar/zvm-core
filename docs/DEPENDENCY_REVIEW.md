@@ -316,6 +316,12 @@ a PEM file and retain the producer's exit status. Verify an archival medium's
 origin and signature separately.
 [Alpine archived release media](https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/x86_64/)
 
+Pass `--against-catalog` with each additional reviewed image catalog to check a
+shared package in one verification. Each catalog must describe the same installed
+package identity, including the compressed control checksum. The report records
+the matching catalog SHA-256 digests and one verified archive digest. Select
+each catalog from the reviewed image revision.
+
 ## Runtime base layer identity
 
 The CI job builds one local image using the Docker driver. The build writes its

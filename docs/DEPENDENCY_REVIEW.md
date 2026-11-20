@@ -300,3 +300,8 @@ return manifest and digest metadata, so the report reuses the built binary and
 keeps the notice payloads in the image. The review of compiler intermediates,
 corresponding source, complete license obligations and Alpine notice text
 remains open.
+
+The image metadata projection handles Docker Engine API 1.52's optional
+`Config.User` field and records whether the engine reported it. The observation
+processes run with the explicit UID/GID recorded by the container job.
+[Docker Engine API changes](https://docs.docker.com/reference/api/engine/version-history/#v152-api-changes)

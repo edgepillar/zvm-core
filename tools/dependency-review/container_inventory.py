@@ -13,6 +13,24 @@ from container_notices import MANIFEST_COMMAND, MAX_INVENTORY, MAX_MANIFEST, PAY
 from govulncheck_review import ReviewError, file_bytes, run_bounded, save, source_binding
 
 
+IMAGE_TEMPLATE = ('{"id":{{json .Id}},"os":{{json .Os}},'
+                  '"architecture":{{json .Architecture}},'
+                  '"entrypoint":{{json .Config.Entrypoint}},"user":{{json (index .Config "User")}}}')
+
+
+def image_projection(raw):
+    image = json.loads(raw)
+    if (not re.fullmatch(r"sha256:[0-9a-f]{64}", image["id"]) or image["os"] != "linux" or
+            image["entrypoint"] != ["zvm"]):
+        raise ReviewError("unexpected CI image identity or entrypoint")
+    user_present = image["user"] is not None
+    if not user_present:
+        image["user"] = ""
+    if not isinstance(image["user"], str):
+        raise ReviewError("unexpected CI image user")
+    return image, user_present
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-commit", required=True)
@@ -46,13 +64,9 @@ def main():
                 raise ReviewError("image observation command did not complete")
             return file_bytes(directory / "stdout", stdout_limit)
 
-        template = ('{"id":{{json .Id}},"os":{{json .Os}},'
-                    '"architecture":{{json .Architecture}},'
-                    '"entrypoint":{{json .Config.Entrypoint}},"user":{{json .Config.User}}}')
-        image = json.loads(run("image", ["docker", "image", "inspect", "--format", template, "zvm-core:ci"]))
-        if (not re.fullmatch(r"sha256:[0-9a-f]{64}", image["id"]) or image["os"] != "linux" or
-                image["entrypoint"] != ["zvm"]):
-            raise ReviewError("unexpected CI image identity or entrypoint")
+        image, user_present = image_projection(
+            run("image", ["docker", "image", "inspect", "--format", IMAGE_TEMPLATE, "zvm-core:ci"]))
+        receipt["imageUserFieldPresent"] = user_present
         # Pin the observed immutable local image ID for every subsequent command.
         common = ["docker", "run", "--rm", "--network=none", "--read-only", "--user=65534:65534",
                   "--cap-drop=ALL", "--security-opt=no-new-privileges"]
@@ -85,6 +99,7 @@ def main():
     if created:
         save(args.output / "inventory.json", receipt)
     summary = {"status": receipt["status"], "exit": result, "completeSBOM": False,
+               "imageUserFieldPresent": receipt.get("imageUserFieldPresent"),
                "releaseAccepted": False, "sourceNotices": receipt.get("sourceNotices")}
     if result:
         summary.update(failureStage=receipt["failureStage"], errorType=receipt["errorType"],

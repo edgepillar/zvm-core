@@ -4,12 +4,23 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from container_inventory import image_projection
 from container_notices import ROOT_MODULE, payload_rows, verify_bundle
 from govulncheck_review import ReviewError
 
 
 def pin(raw):
     return {"bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
+
+
+class ImageProjectionTests(unittest.TestCase):
+    def test_docker_optional_user_field_preserves_default_and_explicit_values(self):
+        metadata = {"id": "sha256:" + "a" * 64, "os": "linux", "architecture": "amd64", "entrypoint": ["zvm"]}
+        for value, expected_user, present in ((None, "", False), ("", "", True), ("65534:65534", "65534:65534", True)):
+            with self.subTest(value=value):
+                image, user_present = image_projection(json.dumps({**metadata, "user": value}).encode())
+                self.assertEqual(image, {**metadata, "user": expected_user})
+                self.assertIs(user_present, present)
 
 
 class ContainerNoticeTests(unittest.TestCase):

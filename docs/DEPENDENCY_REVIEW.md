@@ -342,6 +342,22 @@ CLI image. Independent corresponding-source and distribution license review
 remain open. [Alpine catalog](../LICENSES/alpine/sources.json) ·
 [Reviewed Node source inventory](https://github.com/Zenoglyphs-VM/zvm-node/blob/07c6edeedc1e4493da241868aa3a64f5313396cf/LICENSES/apk/manifest.json)
 
+The build source index records the recipe inputs and their SHA-512 and SHA-256
+pins, plus the Git directories at the build commits recorded by APK. CI
+recomputes each directory's Git tree identity and checks local recipe file
+references, installation hooks and the baselayout upgrade link's target.
+Notices from archives reference an exact recipe source. The index gives
+release reviewers the source locations for the recorded package selection.
+Complete corresponding-source delivery remains open.
+[Alpine build source index](../LICENSES/alpine/build-sources.json)
+
+Alpine baselayout installs the protocols and services tables from Debian
+netbase 6.4. Both tables match the recipe's retained input hashes. The catalog
+includes Debian's original notice for those inputs and the GNU GPL version 2
+reference text. Alpine base and Alpine keys still need original license notice
+review. [Alpine baselayout recipe](https://github.com/alpinelinux/aports/blob/540d8477019887cc6534152e92c3b12676e35d7b/main/alpine-baselayout/APKBUILD) ·
+[Debian netbase 6.4 notice](https://metadata.ftp-master.debian.org/changelogs/main/n/netbase/netbase_6.4_copyright)
+
 CI checks the BusyBox wget provider and fetches a fixed HTTP response over
 loopback in the same network-disabled image. The probe uses the existing
 BusyBox applets and the already-built CLI image. Fleet devnet integration

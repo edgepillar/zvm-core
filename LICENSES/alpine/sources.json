@@ -1,4 +1,8 @@
 {
+  "buildSourceIndex": {
+    "bytes": 97629,
+    "sha256": "98e950964c9848978a9d2e43b810c596820200f265e14d592f8537aa48d1c6fe"
+  },
   "completeCorrespondingSource": false,
   "installedPackages": [
     {
@@ -205,7 +209,19 @@
       "reviewedRecipeInputs": 0
     },
     "alpine-baselayout": {
-      "noticeCandidates": [],
+      "noticeCandidates": [
+        {
+          "bytes": 1234,
+          "path": "debian/copyright",
+          "selectionScope": "RELATED_SOURCE_COPYRIGHT",
+          "sha256": "795b66147ea5ad692991caa7008ece551fb0fa88b9c53656223bd1518dc58ab2",
+          "sourceNames": [
+            "protocols-6.4",
+            "services-6.4"
+          ],
+          "url": "https://salsa.debian.org/md/netbase/-/raw/v6.4/debian/copyright"
+        }
+      ],
       "recipe": {
         "bytes": 8007,
         "commit": "540d8477019887cc6534152e92c3b12676e35d7b",
@@ -214,7 +230,14 @@
         "repository": "https://github.com/alpinelinux/aports",
         "sha256": "8909de40115e389d48f1d78315d9ffcbd2abc9c863b7d93782e78b51c6f0db00"
       },
-      "referenceDocuments": [],
+      "referenceDocuments": [
+        {
+          "bytes": 17984,
+          "identifier": "GPL-2.0-only",
+          "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+          "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt"
+        }
+      ],
       "reviewedRecipeInputs": 12
     },
     "alpine-keys": {

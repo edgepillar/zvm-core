@@ -29,4 +29,5 @@ recipe commits and selected original notices and reference texts. The
 project entries in the image manifest locate the catalog and its objects by
 digest. The APK declaration reader is adapted from zvm-node.
 [Alpine source and notice catalog](LICENSES/alpine/sources.json) ·
+[Alpine build source index](LICENSES/alpine/build-sources.json) ·
 [MIT notice](tools/noticebundle/LICENSE.zvm-node)

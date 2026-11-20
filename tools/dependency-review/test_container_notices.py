@@ -4,6 +4,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from apk_source_index import SOURCE_INDEX, verify_source_index
 from container_inventory import image_projection
 from container_notices import (ALPINE_NOTICE_PREFIX, PREDEPLOY_NOTICE_PREFIX, ROOT_MODULE, payload_rows,
                                verify_bundle, verify_predeploy_notices)
@@ -51,18 +52,43 @@ class ContainerNoticeTests(unittest.TestCase):
         self.installed = [package]
         busybox_license = b"original Alpine source license"
         busybox_pin = pin(busybox_license)
-        apk_catalog = {
+        archive = {"name": "busybox.tar.bz2", "kind": "SOURCE_ARCHIVE", "url": "https://busybox.net/busybox.tar.bz2",
+                   "bytes": 512, "sha512": "a" * 128, "sha256": "b" * 64}
+        recipe_blob, script_blob = "b" * 40, "c" * 40
+        link_target = "busybox.post-install"
+        link_blob = hashlib.sha1(b"blob 20\0busybox.post-install").hexdigest()
+        tree_bytes = (b"100644 APKBUILD\0" + bytes.fromhex(recipe_blob)
+                      + b"100644 busybox.post-install\0" + bytes.fromhex(script_blob)
+                      + b"120000 busybox.post-upgrade\0" + bytes.fromhex(link_blob))
+        source_inventory = {"sha256": "f" * 64}
+        self.source_index = {
+            "schema": 1, "status": "APK_RECIPE_SOURCE_INDEX_REVIEW_REQUIRED", "sourceInventory": source_inventory,
+            "origins": {"busybox": {
+                "recipeCommit": package["declaredBuildCommit"],
+                "recipeDirectoryTree": hashlib.sha1(f"tree {len(tree_bytes)}\0".encode() + tree_bytes).hexdigest(),
+                "recipeDirectoryEntries": [
+                    {"name": "APKBUILD", "type": "blob", "mode": 0o100644, "oid": recipe_blob},
+                    {"name": link_target, "type": "blob", "mode": 0o100644, "oid": script_blob},
+                    {"name": "busybox.post-upgrade", "type": "blob", "mode": 0o120000, "oid": link_blob,
+                     "linkTarget": link_target},
+                ], "sources": [archive],
+            }},
+        }
+        raw_index = json.dumps(self.source_index).encode()
+        self.apk_catalog = {
             "schema": 1, "status": "APK_SOURCE_NOTICE_CANDIDATES_REVIEW_REQUIRED",
             "legalReviewComplete": False, "completeCorrespondingSource": False, "sourceOriginAuthenticated": False,
             "profile": {"os": "linux", "architecture": "amd64", "baseImage": base_image},
-            "installedPackages": self.installed,
+            "installedPackages": self.installed, "sourceInventory": source_inventory, "buildSourceIndex": pin(raw_index),
             "origins": {"busybox": {
                 "recipe": {"repository": "https://github.com/alpinelinux/aports", "path": "main/busybox/APKBUILD",
-                           "commit": package["declaredBuildCommit"], "gitBlob": "b" * 40, "sha256": "a" * 64},
-                "noticeCandidates": [busybox_pin], "referenceDocuments": [],
+                           "commit": package["declaredBuildCommit"], "gitBlob": recipe_blob, "sha256": "a" * 64},
+                "noticeCandidates": [{**busybox_pin, "selectionScope": "ARCHIVE_NOTICE_FILE", "source": archive}],
+                "referenceDocuments": [], "reviewedRecipeInputs": 1,
             }},
         }
-        self.set_notice_file(ALPINE_NOTICE_PREFIX + "sources.json", json.dumps(apk_catalog).encode())
+        self.set_notice_file(ALPINE_NOTICE_PREFIX + "sources.json", json.dumps(self.apk_catalog).encode())
+        self.set_notice_file(ALPINE_NOTICE_PREFIX + SOURCE_INDEX, raw_index)
         self.apk_notice_path = ALPINE_NOTICE_PREFIX + "objects/" + busybox_pin["sha256"]
         self.set_notice_file(self.apk_notice_path, busybox_license)
         self.pins = [*self.project_notices, self.std_notice, self.header]
@@ -114,7 +140,7 @@ class ContainerNoticeTests(unittest.TestCase):
         lines += [f"{row['sha256']}  {path}\n" for path, row in self.observed.items()]
         self.assertEqual(payload_rows("".join(lines).encode()), self.observed)
         result = self.verify()
-        self.assertEqual(result["objectCount"], 8)
+        self.assertEqual(result["objectCount"], 9)
         self.assertEqual(result["projectEmbeddedFiles"], {self.embedded["path"]: self.embedded["sha256"]})
         self.assertEqual(result["predeployNotices"], {
             "catalogSHA256": pin(self.checked[self.catalog_path])["sha256"], "thirdPartyEmbeddedFiles": 1,
@@ -122,6 +148,24 @@ class ContainerNoticeTests(unittest.TestCase):
         })
         self.assertEqual(result["runtimeAPKNotices"]["installedPackages"], 1)
         self.assertEqual(result["runtimeAPKNotices"]["noticeObjects"], 1)
+        self.assertEqual(result["runtimeAPKNotices"]["buildSourceIndex"]["recipeInputs"], 1)
+        self.assertEqual(result["runtimeAPKNotices"]["buildSourceIndex"]["gitLinks"], 1)
+
+    def test_source_index_pin_and_git_link_must_match(self):
+        self.source_index["origins"]["busybox"]["recipeDirectoryEntries"][-1]["linkTarget"] = "APKBUILD"
+        raw = json.dumps(self.source_index).encode()
+        with self.assertRaisesRegex(ReviewError, "index differs from the catalog pin"):
+            verify_source_index(raw, self.apk_catalog)
+        self.apk_catalog["buildSourceIndex"] = pin(raw)
+        with self.assertRaisesRegex(ReviewError, "recipe link target differs"):
+            verify_source_index(raw, self.apk_catalog)
+
+    def test_source_index_rejects_notice_from_another_archive(self):
+        notice = self.apk_catalog["origins"]["busybox"]["noticeCandidates"][0]
+        notice["source"] = {**notice["source"], "sha256": "2" * 64}
+        raw = self.checked[ALPINE_NOTICE_PREFIX + SOURCE_INDEX]
+        with self.assertRaisesRegex(ReviewError, "notice archive differs"):
+            verify_source_index(raw, self.apk_catalog)
 
     def test_missing_predeploy_notice_is_rejected(self):
         self.project_notices[:] = [row for row in self.project_notices if row["path"] != self.license_path]

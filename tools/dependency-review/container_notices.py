@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 
+from apk_source_index import SOURCE_INDEX, verify_source_index
 from govulncheck_review import ReviewError, file_bytes, unique_object
 
 
@@ -180,11 +181,14 @@ def verify_alpine_notices(project, image, installed, module_notices):
             occurrences += 1
     require(objects, "Alpine notice catalog has no candidate bytes")
     catalog_pin = {"bytes": len(catalog_bytes), "sha256": sha256(catalog_bytes).hexdigest()}
-    verify_catalog_files(module_notices, ALPINE_NOTICE_PREFIX, {"sources.json": catalog_pin, **objects}, "Alpine")
+    index = file_bytes(project / (ALPINE_NOTICE_PREFIX + SOURCE_INDEX), 128 << 10)
+    source_index = verify_source_index(index, catalog)
+    verify_catalog_files(module_notices, ALPINE_NOTICE_PREFIX,
+                         {"sources.json": catalog_pin, SOURCE_INDEX: catalog["buildSourceIndex"], **objects}, "Alpine")
     return {"catalogSHA256": catalog_pin["sha256"], "installedPackages": len(installed),
             "sourceOrigins": len(origins), "noticeObjects": len(objects), "noticeOccurrences": occurrences,
             "noticeBytes": sum(row["bytes"] for row in objects.values()), "originsWithoutNoticeCandidates": sorted(gaps),
-            "legalReviewComplete": False, "completeCorrespondingSource": False}
+            "buildSourceIndex": source_index, "legalReviewComplete": False, "completeCorrespondingSource": False}
 
 
 def verify_bundle(raw, observed, image, source, binary_sha256, project, installed):

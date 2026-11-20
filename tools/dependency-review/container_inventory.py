@@ -12,12 +12,14 @@ import sys
 from apk_inventory import APK_DECLARATIONS_COMMAND, WGET_PROBE_COMMAND, WGET_PROBE_RESULT, apk_licenses
 from container_notices import MANIFEST_COMMAND, MAX_INVENTORY, MAX_MANIFEST, PAYLOAD_COMMAND, payload_rows, verify_bundle
 from govulncheck_review import ReviewError, file_bytes, run_bounded, save, source_binding
+from oci_runtime import MAX_BUILD_METADATA, verify_build_output, verify_runtime_base
 
 
 IMAGE_TEMPLATE = ('{"id":{{json .Id}},"os":{{json .Os}},'
                   '"architecture":{{json .Architecture}},'
                   '"entrypoint":{{json .Config.Entrypoint}},"user":{{json (index .Config "User")}},'
-                  '"reportedSizeBytes":{{json .Size}}}')
+                  '"reportedSizeBytes":{{json .Size}},"rootfsType":{{json .RootFS.Type}},'
+                  '"rootfsDiffIDs":{{json .RootFS.Layers}}}')
 
 
 def image_projection(raw):
@@ -38,6 +40,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--build-metadata", type=Path, required=True)
     args = parser.parse_args()
     receipt = {"schema": 1, "observedAt": datetime.now(timezone.utc).isoformat(),
                "status": "IMAGE_OBSERVATION_FAILED_OR_INCOMPLETE", "commands": [],
@@ -70,6 +73,10 @@ def main():
         image, user_present = image_projection(
             run("image", ["docker", "image", "inspect", "--format", IMAGE_TEMPLATE, "zvm-core:ci"]))
         receipt["imageUserFieldPresent"] = user_present
+        phase = "build_output"
+        receipt["buildOutput"] = verify_build_output(file_bytes(args.build_metadata, MAX_BUILD_METADATA), image["id"])
+        phase = "runtime_base"
+        receipt["runtimeBase"] = verify_runtime_base(Path.cwd(), image)
         # Pin the observed immutable local image ID for every subsequent command.
         common = ["docker", "run", "--rm", "--network=none", "--read-only", "--user=65534:65534",
                   "--cap-drop=ALL", "--security-opt=no-new-privileges"]
@@ -113,7 +120,8 @@ def main():
                "releaseAccepted": False, "sourceNotices": receipt.get("sourceNotices")}
     if not result:
         summary.update(image=receipt["image"], installedPackages=receipt["installedPackages"],
-                       busyboxWget=receipt["busyboxWget"])
+                       busyboxWget=receipt["busyboxWget"], buildOutput=receipt["buildOutput"],
+                       runtimeBase=receipt["runtimeBase"])
     if result:
         summary.update(failureStage=receipt["failureStage"], errorType=receipt["errorType"],
                        failureReason=receipt.get("failureReason"))

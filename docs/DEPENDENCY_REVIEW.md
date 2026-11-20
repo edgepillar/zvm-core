@@ -267,15 +267,30 @@ Alpine 3.22's main branch is supported through May 1, 2027 according to the
 is required; this patch does not migrate every supported platform.
 
 The container job retains a bounded observation of its exact local image ID,
-OS/architecture, entrypoint/user, reported size, installed package versions and
-CLI binary SHA-256. The package and binary commands use that immutable local
-image ID with networking disabled, a read-only filesystem and UID/GID 65534. Actual process
-exits, output completeness and stream digests accompany the record; failures
-are retained. The image configuration query selects only these fields rather
-than exporting host paths or environment values. This is an installed-package
-observation, not a complete SBOM, image vulnerability scan, license acceptance,
-independent origin proof or release approval. APK repositories, signing keys
-and transitive package selection still require separate review and locking.
+platform, entrypoint, user, reported size, root filesystem layer identities,
+installed package versions and CLI binary SHA-256. The package and binary
+commands use that immutable local image ID with networking disabled, a
+read-only filesystem and UID/GID 65534. The receipt records process exits,
+output completeness, stream digests and failures. APK repositories, signing
+keys, transitive package locking and distribution acceptance remain open.
+
+## Runtime base layer identity
+
+The CI job loads one BuildKit image and compares BuildKit's emitted config
+digest with the ID inspected by Docker. The receipt includes that matched
+digest. The raw BuildKit metadata stays in the runner's temporary directory.
+[BuildKit metadata fields](https://docs.docker.com/reference/cli/docker/buildx/build/#write-build-result-metadata-to-a-file---metadata-file)
+
+The Alpine runtime fixtures preserve the raw Docker Hub index, the selected
+Linux amd64 manifest and its config. CI hashes the index against the final
+Dockerfile stage, verifies descriptor sizes and digests, and compares the
+config's ordered DiffIDs with the start of the built image's root filesystem.
+This verification runs on the loaded image using the retained JSON. On a
+runtime base update, capture the new registry documents as raw bytes and
+update the reviewed APK profile. Publisher signatures, build worker trust
+and complete distribution acceptance remain separate checks.
+[Runtime registry documents](../tools/dependency-review/fixtures/alpine-runtime) ·
+[OCI image configuration](https://github.com/opencontainers/image-spec/blob/v1.1.1/config.md)
 
 ## CLI image source notices
 

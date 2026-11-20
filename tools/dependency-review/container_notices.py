@@ -7,6 +7,7 @@ import re
 
 from apk_source_index import SOURCE_INDEX, verify_source_index
 from govulncheck_review import ReviewError, file_bytes, unique_object
+from oci_runtime import runtime_base_reference
 
 
 ROOT_MODULE = "github.com/Zenoglyphs-VM/zvm-core"
@@ -139,8 +140,7 @@ def verify_alpine_notices(project, image, installed, module_notices):
     profile = catalog["profile"]
     dockerfile = file_bytes(project / "Dockerfile", 64 << 10).decode("ascii")
     require(profile["os"] == image["os"] and profile["architecture"] == image["architecture"]
-            and re.fullmatch(r"alpine:\d+\.\d+\.\d+@sha256:[0-9a-f]{64}", profile["baseImage"])
-            and f'FROM {profile["baseImage"]}' in dockerfile.splitlines(),
+            and profile["baseImage"] == runtime_base_reference(dockerfile),
             "Alpine catalog profile differs from the selected image build")
     require(catalog["installedPackages"] == installed, "Alpine catalog differs from installed package declarations")
 

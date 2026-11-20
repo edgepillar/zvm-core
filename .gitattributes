@@ -4,3 +4,6 @@
 
 # Source archive notice objects retain their original line endings.
 LICENSES/alpine/objects/** -text
+
+# Registry digests cover the raw JSON bytes.
+tools/dependency-review/fixtures/alpine-runtime/*.json -text

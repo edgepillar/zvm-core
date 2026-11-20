@@ -65,7 +65,9 @@ jobs:
       - name: Verify the selected checkout and credential policy
         run: python3 -B tools/dependency-review/check_checkout.py
       - name: Build the CLI image with the pinned SDK builder
-        run: timeout 720s docker build --progress=plain --tag zvm-core:ci .
+        run: |
+          timeout 720s docker buildx build --load --progress=plain --tag zvm-core:ci \
+            --metadata-file "$RUNNER_TEMP/zvm-build-metadata.json" .
       - name: Exercise CLI usage without a service or network
         run: |
           python3 -B - <<'PY'
@@ -87,6 +89,7 @@ jobs:
         run: |
           python3 -B tools/dependency-review/container_inventory.py \
             --source-commit "$REVIEW_SOURCE_COMMIT" \
+            --build-metadata "$RUNNER_TEMP/zvm-build-metadata.json" \
             --output "$RUNNER_TEMP/container-input-review"
       - name: Retain this attempt's image observations, including failures
         if: always()

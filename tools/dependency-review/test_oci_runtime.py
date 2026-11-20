@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 import unittest
 
@@ -42,10 +41,12 @@ class RuntimeLayerTests(unittest.TestCase):
         with self.assertRaisesRegex(ReviewError, "missing pinned Alpine runtime base"):
             runtime_base_reference("FROM " + REFERENCE + " AS builder\nFROM scratch\n")
 
-    def test_build_metadata_projects_only_the_matched_config_identity(self):
+    def test_exported_image_identity_must_match_the_local_id(self):
         image_id = "sha256:" + "c" * 64
-        record = json.dumps({"containerimage.config.digest": image_id, "unrelatedMetadata": "ignored"}).encode()
-        self.assertEqual(verify_build_output(record, image_id),
-                         {"configDigest": image_id, "observedImageIDMatched": True})
-        with self.assertRaisesRegex(ReviewError, "output differs from the observed image config"):
-            verify_build_output(record, "sha256:" + "d" * 64)
+        for ending in (b"", b"\n"):
+            with self.subTest(ending=ending):
+                self.assertEqual(verify_build_output(image_id.encode() + ending, image_id),
+                                 {"imageID": image_id, "observedImageIDMatched": True})
+        for value in (b"additional metadata", ("sha256:" + "d" * 64).encode()):
+            with self.subTest(value=value), self.assertRaisesRegex(ReviewError, "identity differs from the observed"):
+                verify_build_output(value, image_id)

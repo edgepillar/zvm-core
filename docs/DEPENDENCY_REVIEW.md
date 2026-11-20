@@ -276,10 +276,11 @@ keys, transitive package locking and distribution acceptance remain open.
 
 ## Runtime base layer identity
 
-The CI job loads one BuildKit image and compares BuildKit's emitted config
-digest with the ID inspected by Docker. The receipt includes that matched
-digest. The raw BuildKit metadata stays in the runner's temporary directory.
-[BuildKit metadata fields](https://docs.docker.com/reference/cli/docker/buildx/build/#write-build-result-metadata-to-a-file---metadata-file)
+The CI job builds one local image using the Docker driver. The build writes its
+selected image ID with the `--iidfile` flag. The receipt compares that ID with
+the ID inspected by Docker before observing the image.
+[Docker build driver](https://docs.docker.com/build/builders/drivers/docker/) ·
+[Docker build options](https://docs.docker.com/reference/cli/docker/buildx/build/)
 
 The Alpine runtime fixtures preserve the raw Docker Hub index, the selected
 Linux amd64 manifest and its config. CI hashes the index against the final

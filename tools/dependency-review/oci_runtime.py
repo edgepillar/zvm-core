@@ -10,7 +10,7 @@ from govulncheck_review import ReviewError, file_bytes, unique_object
 
 FIXTURES = Path("tools/dependency-review/fixtures/alpine-runtime")
 MAX_DESCRIPTOR = 64 << 10
-MAX_BUILD_METADATA = 256 << 10
+MAX_BUILD_ID = 128
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 ALPINE = re.compile(r"alpine:\d+\.\d+\.\d+@(sha256:[0-9a-f]{64})")
 INDEX_TYPES = {"application/vnd.oci.image.index.v1+json",
@@ -94,9 +94,7 @@ def verify_runtime_base(project, image):
 
 
 def verify_build_output(raw, image_id):
-    require(0 < len(raw) <= MAX_BUILD_METADATA, "BuildKit metadata exceeds bounds")
-    data = json.loads(raw, object_pairs_hook=unique_object)
-    require(isinstance(data, dict), "BuildKit metadata needs a JSON object")
-    emitted = data.get("containerimage.config.digest")
-    require(digest(emitted) and emitted == image_id, "BuildKit output differs from the observed image config")
-    return {"configDigest": emitted, "observedImageIDMatched": True}
+    require(0 < len(raw) <= MAX_BUILD_ID, "build image identity file exceeds bounds")
+    emitted = raw.decode("ascii").removesuffix("\n")
+    require(digest(emitted) and emitted == image_id, "build image identity differs from the observed image")
+    return {"imageID": emitted, "observedImageIDMatched": True}

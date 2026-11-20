@@ -40,8 +40,10 @@ same contract records. It records expected code and does not prove live code.
 
 The epoch includes an explicit nonzero 32-byte `id`, canonical decimal L1/L2 chain IDs, nonzero genesis block
 hashes, raw rollup/deployment file SHA-256 values, and `isthmus` or `karst` EVM
-rules. The verifier uses the normal strict rollup decoder, reconstructs the
-supported L2 genesis, and checks its execution rules and block hash. The L1
+rules. The verifier uses the normal strict rollup decoder and checks the
+signed L2 genesis as bounded UTF-8 JSON with unique object members before
+passing it to the execution client decoder. It reconstructs the supported L2
+genesis and checks its execution rules and block hash. The L1
 genesis file's bytes are verified; deriving its declared momentum hash still
 requires an independently qualified NoM implementation and runtime observation.
 The operator must rotate the epoch ID on every chain reset, including a reset

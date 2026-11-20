@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -45,6 +46,11 @@ func runGit(t *testing.T, dir string, args ...string) string {
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
+	return newFixtureForChain(t, "l2")
+}
+
+func newFixtureForChain(t *testing.T, chain string) *fixture {
+	t.Helper()
 	root := t.TempDir()
 	f := &fixture{files: filepath.Join(root, "files"), sources: filepath.Join(root, "sources"), keys: TrustedKeys{Schema: Schema}}
 	for _, name := range []string{".github", "zvm-core"} {
@@ -66,11 +72,12 @@ func newFixture(t *testing.T) *fixture {
 	runGit(t, dir, "commit", "-m", "Fixture source")
 	sha := runGit(t, dir, "rev-parse", "HEAD")
 	f.policy = Policy{Schema: Schema, MinSignatures: 2, Repositories: []string{"zvm-core", ".github"}, Toolchains: []string{"fixture-go"}, Images: []string{"fixture-engine"}, Compilers: []string{"fixture-solc"}, Contracts: []string{"fixture-contract"}}
-	rollupRaw, err := os.ReadFile("../chains/l2/rollup.json")
+	chainDir := filepath.Join("..", "chains", chain)
+	rollupRaw, err := os.ReadFile(filepath.Join(chainDir, "rollup.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	genesisRaw, err := os.ReadFile("../chains/l2/genesis.json")
+	genesisRaw, err := os.ReadFile(filepath.Join(chainDir, "genesis.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +100,24 @@ func newFixture(t *testing.T) *fixture {
 	if evm == "" {
 		evm = "isthmus"
 	}
-	f.manifest = Manifest{Schema: Schema, Epoch: Epoch{ID: strings.Repeat("5", 64), L1ChainID: "70", L2ChainID: "7340470", L1GenesisHash: "0x" + strings.Repeat("1", 64), L2GenesisHash: cfg.L2GenesisHash, RollupSHA256: digest(rollupRaw), DeploymentsSHA256: digest(deploymentRaw), EVM: evm}, Repositories: []Repository{{Name: "zvm-core", Commit: sha}, {Name: ".github", Empty: true}}, Toolchains: []Artifact{{ID: "fixture-go", FileID: "tool-archive", Version: "fixture-v1", Platform: "darwin/arm64", SHA256: digest([]byte("fixture-only-archive"))}}, Compilers: []Artifact{{ID: "fixture-solc", FileID: "tool-archive", Version: "fixture-v1", Platform: "darwin/arm64", SHA256: digest([]byte("fixture-only-archive"))}}, Images: []Image{{ID: "fixture-engine", Platform: "linux/amd64", Reference: "registry.invalid/fixture/engine@sha256:" + digest([]byte("fixture-only-image"))}}, Contracts: []Contract{contract}}
+	f.manifest = Manifest{
+		Schema: Schema,
+		Epoch: Epoch{
+			ID:                strings.Repeat("5", 64),
+			L1ChainID:         strconv.FormatUint(cfg.L1ChainID, 10),
+			L2ChainID:         strconv.FormatUint(cfg.L2ChainID, 10),
+			L1GenesisHash:     "0x" + strings.Repeat("1", 64),
+			L2GenesisHash:     cfg.L2GenesisHash,
+			RollupSHA256:      digest(rollupRaw),
+			DeploymentsSHA256: digest(deploymentRaw),
+			EVM:               evm,
+		},
+		Repositories: []Repository{{Name: "zvm-core", Commit: sha}, {Name: ".github", Empty: true}},
+		Toolchains:   []Artifact{{ID: "fixture-go", FileID: "tool-archive", Version: "fixture-v1", Platform: "darwin/arm64", SHA256: digest([]byte("fixture-only-archive"))}},
+		Compilers:    []Artifact{{ID: "fixture-solc", FileID: "tool-archive", Version: "fixture-v1", Platform: "darwin/arm64", SHA256: digest([]byte("fixture-only-archive"))}},
+		Images:       []Image{{ID: "fixture-engine", Platform: "linux/amd64", Reference: "registry.invalid/fixture/engine@sha256:" + digest([]byte("fixture-only-image"))}},
+		Contracts:    []Contract{contract},
+	}
 	for _, item := range []struct {
 		id, kind string
 		raw      []byte
@@ -151,17 +175,39 @@ func copyManifest(t *testing.T, m Manifest) Manifest {
 }
 
 func TestSignedOfflineReleaseBindsFilesSourcesAndEpochWithoutClaimingRuntime(t *testing.T) {
+	for _, chain := range []string{"l2", "l2-69", "l2-dp"} {
+		t.Run(chain, func(t *testing.T) {
+			f := newFixtureForChain(t, chain)
+			r, err := f.manifest.Verify(context.Background(), f.policy, f.signatures(t), f.keys, f.files, f.sources)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if r.RuntimeObserved || r.TrustedSignatures != 2 || r.VerifiedFiles != 7 || r.VerifiedRepositories != 2 || r.ManifestSHA256 == "" || r.EpochSHA256 == "" {
+				t.Fatalf("wrong verification scope: %+v", r)
+			}
+			raw, err := json.Marshal(r)
+			if err != nil || bytes.Contains(raw, []byte(f.files)) || bytes.Contains(raw, []byte(f.sources)) {
+				t.Fatal("receipt contains a private input path")
+			}
+		})
+	}
+}
+
+func TestSignedReleaseRejectsIncompleteGenesisJSON(t *testing.T) {
 	f := newFixture(t)
-	r, err := f.manifest.Verify(context.Background(), f.policy, f.signatures(t), f.keys, f.files, f.sources)
-	if err != nil {
+	index := slices.IndexFunc(f.manifest.Files, func(file File) bool { return file.Kind == "l2-genesis" })
+	if index < 0 {
+		t.Fatal("missing L2 genesis fixture pin")
+	}
+	pin := &f.manifest.Files[index]
+	raw := []byte("{")
+	if err := os.WriteFile(filepath.Join(f.files, pin.Repository, pin.Path), raw, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if r.RuntimeObserved || r.TrustedSignatures != 2 || r.VerifiedFiles != 7 || r.VerifiedRepositories != 2 || r.ManifestSHA256 == "" || r.EpochSHA256 == "" {
-		t.Fatalf("wrong verification scope: %+v", r)
-	}
-	raw, err := json.Marshal(r)
-	if err != nil || bytes.Contains(raw, []byte(f.files)) || bytes.Contains(raw, []byte(f.sources)) {
-		t.Fatal("receipt contains a private input path")
+	pin.Bytes, pin.SHA256 = int64(len(raw)), digest(raw)
+	receipt, err := f.manifest.Verify(context.Background(), f.policy, f.signatures(t), f.keys, f.files, f.sources)
+	if err == nil || err.Error() != "L2 genesis JSON is ambiguous or exceeds its structure bounds" || receipt != (Receipt{}) {
+		t.Fatalf("incomplete genesis did not stop at JSON validation: %v", err)
 	}
 }
 

@@ -78,6 +78,9 @@ func (m Manifest) VerifyEpochFiles(directory string) error {
 	if err != nil {
 		return err
 	}
+	if compilerJSON(raw, 16<<20) != nil {
+		return errors.New("L2 genesis JSON is ambiguous or exceeds its structure bounds")
+	}
 	var g core.Genesis
 	if json.Unmarshal(raw, &g) != nil || g.Config == nil || !reflect.DeepEqual(g.Config, l2.ChainConfig(cfg)) {
 		return errors.New("L2 genesis execution rules disagree with the rollup")

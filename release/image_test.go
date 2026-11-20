@@ -175,8 +175,13 @@ import (
 
 func main() {
 	if len(os.Args) > 1 {
-		if os.Args[1] == "complete" {
+		switch os.Args[1] {
+		case "complete":
 			return
+		case "write-output":
+			if os.WriteFile("/job-output/epoch.json", []byte("epoch=fixture\n"), 0644) == nil {
+				return
+			}
 		}
 		os.Exit(1)
 	}
@@ -217,12 +222,12 @@ func fixtureDocker(t *testing.T, input []byte, args ...string) string {
 	return strings.TrimSpace(string(raw))
 }
 
-func startFixtureContainer(t *testing.T, tag, configPath, project, service string) string {
+func startFixtureContainer(t *testing.T, tag, project, service, mount string) string {
 	t.Helper()
 	container := fixtureDocker(t, nil, "container", "run", "--detach", "--rm", "--pull=never",
 		"--network=none", "--read-only", "--cap-drop=ALL", "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 		"--label", "com.docker.compose.project="+project, "--label", "com.docker.compose.service="+service,
-		"--mount", "type=bind,source="+configPath+",target=/observer-config,readonly", tag)
+		"--mount", mount, tag)
 	if !hash(container, 64) {
 		t.Fatal("Docker did not return the full fixture container ID")
 	}
@@ -288,7 +293,7 @@ func TestReleaseImageObservationAgainstDockerEngine(t *testing.T) {
 	}
 	fixtureDocker(t, archive, "image", "load", "--quiet")
 	project := fmt.Sprintf("zvm-release-fixture-%d", os.Getpid())
-	container := startFixtureContainer(t, tag, configPath, project, "primary")
+	container := startFixtureContainer(t, tag, project, "primary", "type=bind,source="+configPath+",target=/observer-config,readonly")
 	f := newFixture(t)
 	image := &f.manifest.Images[0]
 	image.Platform = "linux/" + runtime.GOARCH
@@ -333,5 +338,8 @@ func TestReleaseImageObservationAgainstDockerEngine(t *testing.T) {
 	})
 	t.Run("signed running service inventory", func(t *testing.T) {
 		checkServicesFixture(t, *image, tag, project, root, executable, mountedConfig)
+	})
+	t.Run("signed job output volumes", func(t *testing.T) {
+		checkJobOutputsFixture(t, *image, tag, project+"-outputs", root, executable)
 	})
 }

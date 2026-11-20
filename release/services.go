@@ -31,6 +31,7 @@ type ServiceObservation struct {
 	ExecutableSHA256               string `json:"executableSha256"`
 	VerifiedConfigFilesPerReplica  int    `json:"verifiedConfigFilesPerReplica"`
 	VerifiedMountedFilesPerReplica int    `json:"verifiedMountedFilesPerReplica"`
+	VerifiedJobOutputsPerReplica   int    `json:"verifiedJobOutputsPerReplica,omitempty"`
 }
 
 // ServicesObservation records the signed running replicas and completed jobs.
@@ -151,42 +152,62 @@ func (m Manifest) ObserveServices(parent context.Context, p Policy, s Signatures
 		snapshot dockerSnapshot
 	}
 	type checkedJob struct {
-		target   ImageTarget
-		image    ImageObservation
-		pin      runtimeJob
-		snapshot dockerJobSnapshot
+		target           ImageTarget
+		image            ImageObservation
+		pin              runtimeJob
+		snapshot         dockerJobSnapshot
+		expectedBindings int
 	}
 	checked := make([]checkedContainer, 0, len(members)-len(inventory.jobs))
 	jobs := make([]checkedJob, 0, len(inventory.jobs))
 	images := make(map[string]ImageObservation)
 	observed := make(map[string]ServiceObservation, len(inventory.services))
+	loadImage := func(id string) (ImageObservation, error) {
+		if image, exists := images[id]; exists {
+			return image, nil
+		}
+		image, err := m.expectedImage(count, id, target.OCIRoot)
+		if err == nil {
+			images[id] = image
+		}
+		return image, err
+	}
 	for _, member := range members {
-		service := inventory.services[member.Service]
 		job, isJob := inventory.jobs[member.Service]
-		imageID := service.image
-		if isJob {
-			imageID = job.Image
-		}
-		wanted, exists := images[imageID]
-		if !exists {
-			wanted, err = m.expectedImage(count, imageID, target.OCIRoot)
-			if err != nil {
-				return result, err
-			}
-			images[imageID] = wanted
-		}
-		selected := ImageTarget{
-			ImageID: imageID, ContainerID: member.ID,
-			DockerContext: target.DockerContext, OCIRoot: target.OCIRoot,
-		}
-		if isJob {
-			snapshot, err := observeDockerJob(ctx, selected, target.Project, job, wanted)
-			if err != nil {
-				return result, fmt.Errorf("job %s: %w", member.Service, err)
-			}
-			jobs = append(jobs, checkedJob{target: selected, image: wanted, pin: job, snapshot: snapshot})
+		if !isJob {
 			continue
 		}
+		image, err := loadImage(job.Image)
+		if err != nil {
+			return result, err
+		}
+		selected := ImageTarget{ImageID: job.Image, ContainerID: member.ID, DockerContext: target.DockerContext, OCIRoot: target.OCIRoot}
+		snapshot, err := observeDockerJob(ctx, selected, target.Project, job, image)
+		if err != nil {
+			return result, fmt.Errorf("job %s: %w", member.Service, err)
+		}
+		var expectedBindings int
+		for i, output := range job.Outputs {
+			service := inventory.services[output.Service]
+			path := strings.TrimPrefix(output.ServicePath, "/")
+			index := slices.IndexFunc(service.files, func(pin processPin) bool { return pin.path == path })
+			service.files[index].output = snapshot.Outputs[i]
+			expectedBindings += service.replicas
+		}
+		jobs = append(jobs, checkedJob{
+			target: selected, image: image, pin: job, snapshot: snapshot, expectedBindings: expectedBindings,
+		})
+	}
+	for _, member := range members {
+		service, running := inventory.services[member.Service]
+		if !running {
+			continue
+		}
+		wanted, err := loadImage(service.image)
+		if err != nil {
+			return result, err
+		}
+		selected := ImageTarget{ImageID: service.image, ContainerID: member.ID, DockerContext: target.DockerContext, OCIRoot: target.OCIRoot}
 		image, snapshot, err := observeExpectedImage(ctx, selected, wanted)
 		if err != nil {
 			return result, fmt.Errorf("service %s: %w", member.Service, err)
@@ -206,6 +227,7 @@ func (m Manifest) ObserveServices(parent context.Context, p Policy, s Signatures
 		role.ExecutableSHA256 = process.ExecutableSHA256
 		role.VerifiedConfigFilesPerReplica = process.VerifiedConfigFiles
 		role.VerifiedMountedFilesPerReplica = process.VerifiedMountedFiles
+		role.VerifiedJobOutputsPerReplica = process.VerifiedJobOutputs
 		if image.ObservedPlatformManifest != "" {
 			role.ReplicasWithObservedManifest++
 		}
@@ -219,13 +241,14 @@ func (m Manifest) ObserveServices(parent context.Context, p Policy, s Signatures
 	var completed []JobObservation
 	for _, job := range jobs {
 		current, err := observeDockerJob(ctx, job.target, target.Project, job.pin, job.image)
-		if err != nil || current != job.snapshot {
+		if err != nil || !current.matches(job.snapshot) {
 			return result, fmt.Errorf("Compose job %s changed during verification", job.pin.Name)
 		}
 		completed = append(completed, JobObservation{
 			Name: job.pin.Name, ImageID: job.image.ImageID,
 			PlatformManifest: job.image.PlatformManifest, ImageConfigDigest: job.image.ImageConfigDigest,
 			ObservedPlatformManifest: current.Container.Manifest, CommandSHA256: job.pin.CommandSHA256, ExitCode: 0,
+			VerifiedOutputBindings: job.expectedBindings,
 		})
 	}
 	current, err := composeMembers(ctx, target, inventory.jobs)

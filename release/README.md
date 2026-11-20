@@ -309,10 +309,34 @@ Keep secrets out of command arguments.
 The verifier rechecks every required job and the selected container inventory.
 It omits unrelated stopped roles and reports successful jobs separately from
 running counts. The receipt contains digests and exit codes. Container IDs,
-raw commands, start and finish times and environment values stay local. This
-checks Docker's latest retained invocation record. The files read by an exited
-process, historical invocations and the provenance of generated outputs
-require separate evidence.
+raw commands, start and finish times and environment values stay local.
+
+A job can also name the signed output files exposed to running services. Add
+`outputs` to its job entry. `path` is the output path in the job's writable
+local Docker volume. `servicePath` is the consumer's absolute path. It must be
+present as a mounted file with a signed digest in the named service policy.
+For example, Devnet's `genesis` job and `l1-pillar` share the NoM volume at
+different paths.
+
+```json
+{
+  "outputs": [
+    {"path": "/nom/genesis.json", "service": "l1-pillar", "servicePath": "/devnet/genesis.json"}
+  ]
+}
+```
+
+The verifier uses Docker's recorded volume and the local kernel file identity
+to check that each consumer replica sees the same file on a read-only mount.
+It hashes the process-visible bytes against the signed file and checks identity
+again before accepting the observation. The observer needs local access to
+the selected Docker volume and the consumer process. The receipt reports job
+output counts while keeping volume names, paths and identities local.
+[Docker volume mounts](https://docs.docker.com/engine/storage/volumes/)
+
+Job records cover the latest retained invocation and the current output files
+visible to their declared consumers. Historical writes, files read by the
+exited process and application-loaded state need independent evidence.
 
 ## Saved contract build material
 

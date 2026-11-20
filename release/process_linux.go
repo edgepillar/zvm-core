@@ -146,6 +146,32 @@ func hashProcessFile(ctx context.Context, proc, fd int, pin File, found runtimeI
 	return nil
 }
 
+func verifyJobOutputFile(fd int, found runtimeIdentity, pin processPin) error {
+	var fs unix.Statfs_t
+	if err := unix.Fstatfs(fd, &fs); err != nil || fs.Flags&unix.ST_RDONLY == 0 {
+		return fmt.Errorf("runtime file %s must view its job output on a read-only mount", pin.file.ID)
+	}
+	root, err := unix.Open(pin.output.root, pathFlags|unix.O_DIRECTORY|unix.O_NOFOLLOW, 0)
+	if err != nil {
+		return fmt.Errorf("local Docker job output volume for %s could not be opened", pin.file.ID)
+	}
+	defer unix.Close(root)
+	file, err := unix.Openat2(root, pin.output.path, &unix.OpenHow{
+		Flags: pathFlags, Resolve: unix.RESOLVE_IN_ROOT | unix.RESOLVE_NO_SYMLINKS,
+	})
+	if err != nil {
+		return fmt.Errorf("local Docker job output for %s could not be opened", pin.file.ID)
+	}
+	defer unix.Close(file)
+	volumeIdentity, err := runtimeFileIdentity(file)
+	// Both views must identify the same file across their distinct mounts.
+	volumeIdentity.mount = found.mount
+	if err != nil || volumeIdentity.mode != unix.S_IFREG || volumeIdentity != found {
+		return fmt.Errorf("runtime file %s disagrees with its Docker job output identity", pin.file.ID)
+	}
+	return nil
+}
+
 func verifyProcessFiles(ctx context.Context, snapshot dockerSnapshot, pins []processPin, recheck func() error) error {
 	proc, err := unix.Open("/proc", pathFlags|unix.O_DIRECTORY|unix.O_NOFOLLOW, 0)
 	if err != nil {
@@ -195,6 +221,9 @@ func verifyProcessFiles(ctx context.Context, snapshot dockerSnapshot, pins []pro
 		if err == nil && pin.mounted && found.mount == rootIdentity.mount {
 			err = fmt.Errorf("runtime file %s is outside its expected separate mount", pin.file.ID)
 		}
+		if err == nil && pin.output.root != "" {
+			err = verifyJobOutputFile(fd, found, pin)
+		}
 		if err == nil {
 			err = hashProcessFile(ctx, proc, fd, pin.file, found, buffer)
 		}
@@ -226,6 +255,9 @@ func verifyProcessFiles(ctx context.Context, snapshot dockerSnapshot, pins []pro
 			return err
 		}
 		found, err := runtimeFileIdentity(fd)
+		if err == nil && pin.output.root != "" {
+			err = verifyJobOutputFile(fd, found, pin)
+		}
 		unix.Close(fd)
 		if err != nil || found != identities[i] {
 			return fmt.Errorf("runtime file %s changed during verification", pin.file.ID)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 )
@@ -18,6 +19,7 @@ type ProcessObservation struct {
 	ExecutableSHA256     string           `json:"executableSha256"`
 	VerifiedConfigFiles  int              `json:"verifiedConfigFiles"`
 	VerifiedMountedFiles int              `json:"verifiedMountedFiles"`
+	VerifiedJobOutputs   int              `json:"verifiedJobOutputs,omitempty"`
 }
 
 type runtimeFile struct {
@@ -44,6 +46,7 @@ type processPin struct {
 	file    File
 	path    string
 	mounted bool
+	output  volumeFile
 }
 
 type servicePins struct {
@@ -134,10 +137,27 @@ func (m Manifest) runtimeInventory(directory string) (runtimeInventory, error) {
 		services[name] = servicePins{image: service.Image, replicas: replicas, files: bindings}
 	}
 	jobs := make(map[string]runtimeJob, len(policy.Jobs))
+	boundPaths := make(map[[2]string]bool)
+	var outputChecks int
 	for _, job := range policy.Jobs {
 		if !identifier.MatchString(job.Name) || services[job.Name].files != nil || jobs[job.Name].Name != "" ||
 			!images[job.Image] || !hash(job.CommandSHA256, 64) {
 			return runtimeInventory{}, errors.New("runtime process policy requires unique job names, signed image IDs and command digests")
+		}
+		for _, output := range job.Outputs {
+			source, absolute := strings.CutPrefix(output.Path, "/")
+			target, targetAbsolute := strings.CutPrefix(output.ServicePath, "/")
+			consumer := services[output.Service]
+			key := [2]string{output.Service, target}
+			if !absolute || !relative(source) || !targetAbsolute || !relative(target) || boundPaths[key] ||
+				!slices.ContainsFunc(consumer.files, func(pin processPin) bool { return pin.path == target && pin.mounted }) {
+				return runtimeInventory{}, errors.New("runtime job output requires a unique signed mounted service file")
+			}
+			outputChecks += consumer.replicas
+			if outputChecks > MaxEntries {
+				return runtimeInventory{}, errors.New("runtime job outputs exceed the replica check limit")
+			}
+			boundPaths[key] = true
 		}
 		jobs[job.Name] = job
 	}
@@ -207,14 +227,17 @@ func observePinnedProcess(ctx context.Context, target ImageTarget, image ImageOb
 	if err := verifyProcessFiles(ctx, snapshot, pins, recheck); err != nil {
 		return result, err
 	}
-	var mounted int
+	var mounted, outputs int
 	for _, pin := range pins {
 		if pin.mounted {
 			mounted++
 		}
+		if pin.output.root != "" {
+			outputs++
+		}
 	}
 	return ProcessObservation{
 		Image: image, ProcessPolicySHA256: policy, ExecutableSHA256: pins[0].file.SHA256,
-		VerifiedConfigFiles: len(pins) - 1, VerifiedMountedFiles: mounted,
+		VerifiedConfigFiles: len(pins) - 1, VerifiedMountedFiles: mounted, VerifiedJobOutputs: outputs,
 	}, nil
 }

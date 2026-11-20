@@ -50,14 +50,15 @@ func checkServicesFixture(t *testing.T, image Image, tag, project, root string, 
 	if err := os.WriteFile(configPath, readerConfig, 0600); err != nil {
 		t.Fatal(err)
 	}
-	firstReader := startFixtureContainer(t, tag, configPath, project, "reader")
+	mount := "type=bind,source=" + configPath + ",target=/observer-config,readonly"
+	firstReader := startFixtureContainer(t, tag, project, "reader", mount)
 	t.Run("missing replica", func(t *testing.T) {
 		got, err := f.manifest.ObserveServices(t.Context(), f.policy, f.signatures(t), f.keys, target)
 		if err == nil || !strings.Contains(err.Error(), "signed count for reader") || got.Services != nil {
 			t.Fatalf("incomplete running inventory received a record: %v", err)
 		}
 	})
-	secondReader := startFixtureContainer(t, tag, configPath, project, "reader")
+	secondReader := startFixtureContainer(t, tag, project, "reader", mount)
 	t.Run("all signed replicas and roles", func(t *testing.T) {
 		inputs := writeReleaseTestInputs(t, f)
 		raw := runReleaseTestCLI(t, "release-observe-services", "-manifest", filepath.Join(inputs, "manifest.json"),
@@ -98,8 +99,8 @@ func checkServicesFixture(t *testing.T, image Image, tag, project, root string, 
 		}
 		writePolicy(withJobs)
 		defer writePolicy(policy)
-		setup := startFixtureJob(t, tag, project, "setup", "False", "0", "complete", "fixture-setup-argument")
-		startFixtureJob(t, tag, project, "retired", "False", "0", "complete")
+		setup := startFixtureJob(t, tag, project, "setup", "False", "0", "", "complete", "fixture-setup-argument")
+		startFixtureJob(t, tag, project, "retired", "False", "0", "", "complete")
 		for _, test := range []struct {
 			name, oneOff, exitCode, wantError string
 			args                              []string
@@ -113,7 +114,7 @@ func checkServicesFixture(t *testing.T, image Image, tag, project, root string, 
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				if test.args != nil {
-					startFixtureJob(t, tag, project, "genesis", test.oneOff, test.exitCode, test.args...)
+					startFixtureJob(t, tag, project, "genesis", test.oneOff, test.exitCode, "", test.args...)
 				}
 				got, err := f.manifest.ObserveServices(t.Context(), f.policy, f.signatures(t), f.keys, target)
 				if err == nil || !strings.Contains(err.Error(), test.wantError) || got.Services != nil || got.CompletedJobs != nil {
@@ -121,7 +122,7 @@ func checkServicesFixture(t *testing.T, image Image, tag, project, root string, 
 				}
 			})
 		}
-		genesis := startFixtureJob(t, tag, project, "genesis", "False", "0", "complete", "fixture-genesis-argument")
+		genesis := startFixtureJob(t, tag, project, "genesis", "False", "0", "", "complete", "fixture-genesis-argument")
 		t.Run("two successful jobs and three running replicas", func(t *testing.T) {
 			inputs := writeReleaseTestInputs(t, f)
 			raw := runReleaseTestCLI(t, "release-observe-services", "-manifest", filepath.Join(inputs, "manifest.json"),
@@ -147,7 +148,7 @@ func checkServicesFixture(t *testing.T, image Image, tag, project, root string, 
 			t.Logf("Verified %d successful jobs with %d running replicas on the same image", len(got.CompletedJobs), got.ContainersObserved)
 		})
 		t.Run("ambiguous completed container", func(t *testing.T) {
-			startFixtureJob(t, tag, project, "genesis", "False", "0", "complete", "fixture-genesis-argument")
+			startFixtureJob(t, tag, project, "genesis", "False", "0", "", "complete", "fixture-genesis-argument")
 			got, err := f.manifest.ObserveServices(t.Context(), f.policy, f.signatures(t), f.keys, target)
 			if err == nil || !strings.Contains(err.Error(), "requires one completed container for job genesis") || got.CompletedJobs != nil {
 				t.Fatalf("duplicated job received an inventory receipt: %v", err)
@@ -164,11 +165,17 @@ func checkServicesFixture(t *testing.T, image Image, tag, project, root string, 
 	})
 }
 
-func startFixtureJob(t *testing.T, tag, project, service, oneOff, exitCode string, command ...string) string {
+func startFixtureJob(t *testing.T, tag, project, service, oneOff, exitCode, mount string, command ...string) string {
 	t.Helper()
 	args := []string{"container", "run", "--detach", "--pull=never", "--network=none", "--read-only", "--cap-drop=ALL",
-		"--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()), "--label", "com.docker.compose.project=" + project,
-		"--label", "com.docker.compose.service=" + service, "--label", "com.docker.compose.oneoff=" + oneOff, tag}
+		"--label", "com.docker.compose.project=" + project,
+		"--label", "com.docker.compose.service=" + service, "--label", "com.docker.compose.oneoff=" + oneOff}
+	user := fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid())
+	if mount != "" {
+		args = append(args, "--mount", mount)
+		user = "0:0"
+	}
+	args = append(args, "--user", user, tag)
 	container := fixtureDocker(t, nil, append(args, command...)...)
 	if !hash(container, 64) {
 		t.Fatal("Docker did not return the full fixture job container ID")

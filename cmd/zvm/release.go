@@ -14,6 +14,7 @@ import (
 func init() {
 	register("release-message", "emit the canonical release signing message without signing", func(args []string) error { return releaseMessage(args, os.Stdout) })
 	register("release-verify", "verify a signed release against independent policy and local inputs", func(args []string) error { return releaseVerify(args, os.Stdout) })
+	register("release-observe-chain", "compare chain and contract observations with a signed release", func(args []string) error { return releaseObserveChain(args, os.Stdout) })
 }
 
 func releaseDocument(name string) ([]byte, error) {
@@ -65,6 +66,29 @@ func releaseInputs(manifest, policy string) (release.Manifest, release.Policy, e
 	return m, p, err
 }
 
+func signedReleaseInputs(manifest, policy, signatures, keys string) (release.Manifest, release.Policy, release.Signatures, release.TrustedKeys, error) {
+	var s release.Signatures
+	var k release.TrustedKeys
+	m, p, err := releaseInputs(manifest, policy)
+	if err != nil {
+		return m, p, s, k, err
+	}
+	raw, err := releaseDocument(signatures)
+	if err != nil {
+		return m, p, s, k, err
+	}
+	s, err = release.DecodeSignatures(raw)
+	if err != nil {
+		return m, p, s, k, err
+	}
+	raw, err = releaseDocument(keys)
+	if err != nil {
+		return m, p, s, k, err
+	}
+	k, err = release.DecodeTrustedKeys(raw)
+	return m, p, s, k, err
+}
+
 func releaseVerify(args []string, w io.Writer) error {
 	fs := flag.NewFlagSet("release-verify", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -81,23 +105,7 @@ func releaseVerify(args []string, w io.Writer) error {
 	if *manifest == "" || *policy == "" || *signatures == "" || *keys == "" || *files == "" || *sources == "" || fs.NArg() != 0 {
 		return errors.New("manifest, policy, signatures, trusted keys, files root and sources root are required")
 	}
-	m, p, err := releaseInputs(*manifest, *policy)
-	if err != nil {
-		return err
-	}
-	raw, err := releaseDocument(*signatures)
-	if err != nil {
-		return err
-	}
-	s, err := release.DecodeSignatures(raw)
-	if err != nil {
-		return err
-	}
-	raw, err = releaseDocument(*keys)
-	if err != nil {
-		return err
-	}
-	k, err := release.DecodeTrustedKeys(raw)
+	m, p, s, k, err := signedReleaseInputs(*manifest, *policy, *signatures, *keys)
 	if err != nil {
 		return err
 	}
@@ -112,4 +120,37 @@ func releaseVerify(args []string, w io.Writer) error {
 		return err
 	}
 	return json.NewEncoder(w).Encode(receipt)
+}
+
+func releaseObserveChain(args []string, w io.Writer) error {
+	fs := flag.NewFlagSet("release-observe-chain", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	manifest := fs.String("manifest", "", "release manifest")
+	policy := fs.String("policy", "", "independently reviewed release inventory")
+	signatures := fs.String("signatures", "", "detached signature envelope")
+	keys := fs.String("trusted-keys", "", "independently provisioned public-key inventory")
+	l1 := fs.String("l1-rpc", "", "primary NoM RPC URL")
+	l1Witness := fs.String("l1-witness-rpc", "", "independently selected NoM RPC URL")
+	l2 := fs.String("l2-rpc", "", "primary execution RPC URL")
+	l2Witness := fs.String("l2-witness-rpc", "", "independently selected execution RPC URL")
+	l1Height := fs.Uint64("l1-height", 0, "NoM momentum height to compare")
+	l2Height := fs.Uint64("l2-height", 0, "execution block number to compare")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *manifest == "" || *policy == "" || *signatures == "" || *keys == "" || fs.NArg() != 0 {
+		return errors.New("manifest, policy, signatures and trusted keys are required")
+	}
+	m, p, s, k, err := signedReleaseInputs(*manifest, *policy, *signatures, *keys)
+	if err != nil {
+		return err
+	}
+	observation, err := m.ObserveChain(context.Background(), p, s, k, release.ChainTargets{
+		L1: [2]string{*l1, *l1Witness}, L2: [2]string{*l2, *l2Witness},
+		L1Height: *l1Height, L2Height: *l2Height,
+	})
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(w).Encode(observation)
 }

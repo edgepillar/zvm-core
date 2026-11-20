@@ -141,6 +141,35 @@ NoM genesis profiles offline. CI produces the chain-69 input with the same
 `zvm l1-genesis` command used by Devnet and a timestamp from the tracked rollup.
 No wallet, container or live chain is started.
 
+## Independent chain observations
+
+After offline verification, an observer can compare the signed release against
+two independently operated NoM endpoints and two independently operated L2
+execution endpoints at explicit post-genesis heights.
+
+```sh
+zvm release-observe-chain \
+  -manifest manifest.json -policy policy.json \
+  -signatures signatures.json -trusted-keys trusted-keys.json \
+  -l1-rpc "$L1_PRIMARY" -l1-witness-rpc "$L1_WITNESS" -l1-height "$L1_HEIGHT" \
+  -l2-rpc "$L2_PRIMARY" -l2-witness-rpc "$L2_WITNESS" -l2-height "$L2_HEIGHT"
+```
+
+Use separately selected HTTP or HTTPS authorities for each layer. The
+observer provisions their addresses and confirms their operational independence.
+The CLI authenticates the manifest before requesting chain IDs, genesis and
+common-height headers. It computes L2 block hashes from execution headers and
+checks every signed contract code hash on both L2 endpoints at the agreed
+block hash using [EIP-1898](https://eips.ethereum.org/EIPS/eip-1898) canonical
+block selection. It checks the common heights again before issuing the record.
+Any disagreement or unavailable observation prevents a record.
+
+The record contains the manifest and epoch digests, agreed heights and hashes,
+signature count and checked contract count. Its scope is chain and bytecode
+agreement at those observed heights. Live epoch identity, finality and image
+and process identity require their own evidence. Each HTTP response is limited
+to 8 MiB and ten seconds and the observation has a two-minute deadline.
+
 ## Saved contract build material
 
 A release can declare an additional file with `id: "contract-build-policy"`,

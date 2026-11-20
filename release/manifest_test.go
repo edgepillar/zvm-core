@@ -665,12 +665,8 @@ func TestEpochSemanticChecksRejectResignedInconsistentFiles(t *testing.T) {
 	}
 }
 
-func TestReleaseCLIEmitsTheSigningMessageAndVerifiesTheActualInputSet(t *testing.T) {
-	f := newFixture(t)
-	verifier := os.Getenv("ZVM_TEST_NOM_GENESIS_VERIFIER")
-	if verifier != "" {
-		pinNoMGenesis(t, f, verifier, "../chains/nom/genesis.json")
-	}
+func writeReleaseTestInputs(t *testing.T, f *fixture) string {
+	t.Helper()
 	inputs := t.TempDir()
 	for name, value := range map[string]any{"manifest": f.manifest, "policy": f.policy, "signatures": f.signatures(t), "keys": f.keys} {
 		raw, err := json.MarshalIndent(value, "", "  ")
@@ -681,25 +677,36 @@ func TestReleaseCLIEmitsTheSigningMessageAndVerifiesTheActualInputSet(t *testing
 			t.Fatal(err)
 		}
 	}
+	return inputs
+}
+
+func runReleaseTestCLI(t *testing.T, args ...string) []byte {
+	t.Helper()
 	tool := filepath.Join(runtime.GOROOT(), "bin", "go")
 	if runtime.GOOS == "windows" {
 		tool += ".exe"
 	}
-	run := func(args ...string) []byte {
-		t.Helper()
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		cmd := exec.CommandContext(ctx, tool, append([]string{"run", "-mod=readonly", "../cmd/zvm"}, args...)...)
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		raw, err := cmd.Output()
-		if err != nil {
-			t.Fatalf("release CLI failed: %v: %s", err, stderr.Bytes())
-		}
-		return raw
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, tool, append([]string{"run", "-mod=readonly", "../cmd/zvm"}, args...)...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	raw, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("release CLI failed: %v: %s", err, stderr.Bytes())
 	}
+	return raw
+}
+
+func TestReleaseCLIEmitsTheSigningMessageAndVerifiesTheActualInputSet(t *testing.T) {
+	f := newFixture(t)
+	verifier := os.Getenv("ZVM_TEST_NOM_GENESIS_VERIFIER")
+	if verifier != "" {
+		pinNoMGenesis(t, f, verifier, "../chains/nom/genesis.json")
+	}
+	inputs := writeReleaseTestInputs(t, f)
 	common := []string{"-manifest", filepath.Join(inputs, "manifest.json"), "-policy", filepath.Join(inputs, "policy.json")}
-	message := run(append([]string{"release-message"}, common...)...)
+	message := runReleaseTestCLI(t, append([]string{"release-message"}, common...)...)
 	want, err := f.manifest.SigningMessage()
 	if err != nil || !bytes.Equal(message, want) {
 		t.Fatal("CLI changed the signing message")
@@ -710,7 +717,7 @@ func TestReleaseCLIEmitsTheSigningMessageAndVerifiesTheActualInputSet(t *testing
 		args = append(args, "-l1-genesis-verifier", verifier)
 	}
 	var receipt Receipt
-	if err := json.Unmarshal(run(args...), &receipt); err != nil {
+	if err := json.Unmarshal(runReleaseTestCLI(t, args...), &receipt); err != nil {
 		t.Fatal(err)
 	}
 	if receipt.RuntimeObserved || receipt.VerifiedL1Genesis != (verifier != "") || receipt.TrustedSignatures != 2 || receipt.VerifiedFiles != 7 || receipt.VerifiedRepositories != 2 {
